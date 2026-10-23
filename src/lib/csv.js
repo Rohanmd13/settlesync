@@ -1,4 +1,4 @@
-import { inrRateOn } from "./inr";
+import { rateOn } from "./inr";
 import { NETWORK, parseRequestMemo } from "./stellar";
 import { statusOf, STATUS_LABEL } from "./invoices";
 
@@ -8,19 +8,20 @@ function cell(v) {
 }
 const toCsv = (rows) => rows.map((r) => r.map(cell).join(",")).join("\n");
 
-const FOOTNOTE = (owner) => [
+const FOOTNOTE = (owner, fiat) => [
   [],
   [`Wallet: ${owner}`],
   [`Network: Stellar ${NETWORK.name.toLowerCase()}`],
-  ["INR rates: CoinGecko daily rate for the receipt date. A record for your CA, not tax advice."],
+  [`${fiat} rates: CoinGecko daily rate for the payment date. A record for your accountant, not tax advice.`],
 ];
 
 // Invoices ledger: one row per received payment (what a CA reconciles against),
 // plus one row for each invoice still unpaid.
 export async function buildLedgerCsv(invoices, owner, profile = {}) {
+  const fiat = profile.currency || "INR";
   const rows = [[
     "Invoice ID", "Client", "Description", "Invoice date", "Due date", "Invoice amount", "Asset", "Status",
-    "Payment received (UTC)", "Amount received", "INR rate on receipt day", "INR value on receipt day",
+    "Payment received (UTC)", "Amount received", `${fiat} rate on receipt day`, `${fiat} value on receipt day`,
     "Paid from wallet", "Transaction link",
   ]];
   for (const inv of invoices) {
@@ -33,7 +34,7 @@ export async function buildLedgerCsv(invoices, owner, profile = {}) {
       continue;
     }
     for (const p of inv.payments) {
-      const rate = await inrRateOn(p.assetCode, p.createdAt);
+      const rate = await rateOn(p.assetCode, p.createdAt, fiat);
       rows.push([
         ...base,
         p.createdAt.replace("T", " ").replace("Z", ""),
@@ -46,15 +47,15 @@ export async function buildLedgerCsv(invoices, owner, profile = {}) {
     }
   }
   const head = profile.name ? [[`${profile.name}${profile.gstin ? ` (GSTIN ${profile.gstin})` : ""}`], []] : [];
-  return toCsv([...head, ...rows, ...FOOTNOTE(owner)]);
+  return toCsv([...head, ...rows, ...FOOTNOTE(owner, fiat)]);
 }
 
 // Full payment history, both directions, with what each payment was.
-export async function buildHistoryCsv(payments, owner) {
-  const rows = [["Date (UTC)", "Direction", "What", "Amount", "Asset", "INR value on the day", "Counterparty", "Memo", "Transaction link"]];
+export async function buildHistoryCsv(payments, owner, fiat = "INR") {
+  const rows = [["Date (UTC)", "Direction", "What", "Amount", "Asset", `${fiat} value on the day`, "Counterparty", "Memo", "Transaction link"]];
   for (const p of payments) {
     const what = describePayment(p, owner);
-    const rate = what.kind === "request" ? null : await inrRateOn(p.assetCode, p.createdAt);
+    const rate = what.kind === "request" || what.kind === "code" ? null : await rateOn(p.assetCode, p.createdAt, fiat);
     rows.push([
       p.createdAt.replace("T", " ").replace("Z", ""),
       p.direction === "in" ? "Received" : "Sent",
@@ -67,10 +68,14 @@ export async function buildHistoryCsv(payments, owner) {
       NETWORK.explorerTx(p.hash),
     ]);
   }
-  return toCsv([...rows, ...FOOTNOTE(owner)]);
+  return toCsv([...rows, ...FOOTNOTE(owner, fiat)]);
 }
 
 export function describePayment(p) {
+  const memo = p.memo || "";
+  if (memo.startsWith("C:")) return { kind: "code", label: p.direction === "out" ? "Claim code created" : "Claim code funded" };
+  if (memo.startsWith("K:")) return { kind: "invoice", label: p.direction === "in" ? "Claim code redeemed" : "Claim code sent" };
+  if (memo.startsWith("PRO")) return { kind: "invoice", label: p.direction === "out" ? "SettleSync Pro subscription" : "Pro subscription received" };
   const req = parseRequestMemo(p.memo);
   if (req) {
     return p.direction === "in"
@@ -82,6 +87,7 @@ export function describePayment(p) {
       ? { kind: "invoice", label: `Payment received for ${p.memo}` }
       : { kind: "invoice", label: `Paid invoice ${p.memo}` };
   }
+  if (memo) return { kind: "invoice", label: `${p.direction === "in" ? "Received" : "Sent"}: "${memo}"` };
   return { kind: "other", label: p.direction === "in" ? "Payment received" : "Payment sent" };
 }
 

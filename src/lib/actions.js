@@ -7,6 +7,12 @@ import {
   getAccountInfo,
   isValidAddress,
   requestMemoFits,
+  buildDirectPayment,
+  buildClaimCode,
+  cosignWithCode,
+  buildRedeem,
+  buildProPayment,
+  buildTestUsdcSwap,
 } from "./stellar";
 import { signWithWallet } from "./wallet";
 
@@ -41,4 +47,39 @@ export async function enableUsdc(address) {
   const xdr = await buildUsdcTrustline(address);
   const signed = await signWithWallet(xdr, address);
   return submitSigned(signed);
+}
+
+export async function payDirect({ from, to, amount, assetCode, note }) {
+  const dest = to.trim();
+  if (!isValidAddress(dest)) throw new Error("That doesn't look like a Stellar address. It starts with G and is 56 characters long.");
+  if (dest === from) throw new Error("That's your own wallet.");
+  const info = await getAccountInfo(dest);
+  if (!info.exists) throw new Error("That wallet isn't active on Stellar testnet yet. Send a claim code instead; it works for any wallet.");
+  if (assetCode === "USDC" && !info.hasUsdcTrustline) throw new Error("That wallet can't receive USDC yet. Send XLM, or a claim code they can redeem once USDC is enabled.");
+  const xdr = await buildDirectPayment({ from, to: dest, amount, assetCode, note });
+  return submitSigned(await signWithWallet(xdr, from));
+}
+
+export async function createClaimCode({ from, amount, assetCode, note, fromName }) {
+  const { xdr, secret, publicKey } = await buildClaimCode({ from, amount, assetCode, note, fromName });
+  const signed = await signWithWallet(xdr, from);
+  const res = await submitSigned(cosignWithCode(signed, secret));
+  return { secret, publicKey, hash: res.hash };
+}
+
+// Redeeming needs no wallet signature: the code itself signs.
+export async function redeemClaimCode({ secret, to }) {
+  const { xdr, code } = await buildRedeem({ secret, to });
+  const res = await submitSigned(xdr);
+  return { hash: res.hash, code };
+}
+
+export async function payPro({ from, assetCode, publicName }) {
+  const xdr = await buildProPayment({ from, assetCode, publicName });
+  return submitSigned(await signWithWallet(xdr, from));
+}
+
+export async function getTestUsdc({ address, hasTrustline }) {
+  const xdr = await buildTestUsdcSwap({ address, addTrustline: !hasTrustline });
+  return submitSigned(await signWithWallet(xdr, address));
 }

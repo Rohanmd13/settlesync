@@ -1,6 +1,6 @@
 # SettleSync
 
-USDC invoicing for Indian freelancers and builders, on Stellar. Every payment carries its invoice number in the Stellar memo field, so SettleSync matches it to the right invoice automatically, and exports a CA-ready ledger with the INR value on the day each payment arrived.
+USDC invoicing for freelancers and the people who pay them, on Stellar. Built in India, for everywhere. Every payment carries its invoice number in the Stellar memo field, so SettleSync matches it to the right invoice automatically, and exports a CA-ready ledger with the INR value on the day each payment arrived.
 
 **Status:** testnet pilot.
 
@@ -15,7 +15,8 @@ Indian Web3 developers, designers and contributors are increasingly paid in USDC
    - **Pay link**: share on WhatsApp, email or as a QR code. The client opens it, connects any Stellar wallet, and pays in one click. No account needed.
    - **Wallet request**: enter the client's Stellar address. SettleSync sends the request *on Stellar itself* (a 0.0000001 XLM payment whose memo is `R:<invoiceId>:<amount>:<asset>`). It appears in the client's **Bills to pay**, and they pay with one tap. No server, works on any device.
 3. **It marks itself paid**: the invoice ID is sent as the payment's text memo. SettleSync watches the freelancer's incoming payments on Horizon and matches by memo and asset. Partial payments add up until the invoice is fully paid.
-4. **Export for your CA**: one CSV with every payment, the INR rate on the receipt day, and a link to each transaction as proof.
+3b. **Client pays first (claim codes)**: a client can pay before any invoice exists. The amount is locked in a fresh one-time Stellar account (created, funded and trust-lined in one transaction co-signed by the payer's wallet and the one-time key). The code is that key: the recipient redeems it in SettleSync, which pays them, removes the trustline and data entries, and merges the account back to the payer so the XLM deposit returns. Unredeemed codes can be taken back.
+4. **Export for your accountant**: one CSV with every payment, the INR rate on the receipt day, and a link to each transaction as proof.
 
 ## Use of Stellar
 
@@ -34,7 +35,11 @@ Indian Web3 developers, designers and contributors are increasingly paid in USDC
 - Part-payments add up automatically; invoice PDF download
 - Totals in INR at today's rate; CA export with the INR rate on each payment day
 - Backup/restore, and automatic restore of wallet-requested invoices from Stellar
-- Light and dark mode, mobile layout
+- Send money: pay a wallet directly with a note, or create claim codes; track, re-share and take back codes
+- Pro subscription paid on-chain to the SettleSync treasury; hidden owner dashboard (`#/owner`) reads revenue live from the treasury
+- Local currency for totals and exports (INR default, plus USD, EUR, GBP, AED, SGD, NGN, BRL, PHP)
+- "Get test USDC" swaps test XLM for USDC on Stellar's built-in exchange (path payment)
+- Light and dark mode, interactive ink-dot background, mobile and iOS layouts
 
 ## Run it locally
 

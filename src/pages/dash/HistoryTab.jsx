@@ -8,7 +8,7 @@ import { DownloadIcon } from "../../components/Icons";
 const FILTERS = { all: "Everything", settlesync: "SettleSync only", in: "Received", out: "Sent" };
 
 export default function HistoryTab({ payments, names }) {
-  const { address } = useApp();
+  const { address, profile } = useApp();
   const [filter, setFilter] = useState("settlesync");
   const [exporting, setExporting] = useState(false);
 
@@ -38,7 +38,7 @@ export default function HistoryTab({ payments, names }) {
   const exportCsv = async () => {
     setExporting(true);
     try {
-      downloadText(`settlesync-history-${new Date().toISOString().slice(0, 10)}.csv`, await buildHistoryCsv(rows, address));
+      downloadText(`settlesync-history-${new Date().toISOString().slice(0, 10)}.csv`, await buildHistoryCsv(rows, address, profile.currency || "INR"));
     } finally {
       setExporting(false);
     }
@@ -69,13 +69,13 @@ export default function HistoryTab({ payments, names }) {
                   const who = p.direction === "in" ? p.from : p.to;
                   const sign = p.direction === "in" ? "+" : "−";
                   return (
-                    <li key={p.id} className={`history__item history__item--${p.direction} history__item--${p.what.kind}`}>
+                    <li key={p.id} className={`history__item history__item--${p.direction} history__item--${p.what.kind === "code" ? "request" : p.what.kind}`}>
                       <span className="history__dir" aria-hidden="true">{p.direction === "in" ? "↓" : "↑"}</span>
                       <span className="history__what">
                         <b>{p.what.label}</b>
                         <small>{p.direction === "in" ? "from" : "to"} {names[who] || shortAddr(who)} · {relativeTime(p.createdAt)}</small>
                       </span>
-                      <span className="history__amt">{p.what.kind === "request" ? "request" : `${sign}${formatAmount(p.amount, p.assetCode)}`}</span>
+                      <span className="history__amt">{p.what.kind === "request" ? "request" : p.what.kind === "code" ? "locked in code" : `${sign}${formatAmount(p.amount, p.assetCode)}`}</span>
                       <a className="history__link" href={NETWORK.explorerTx(p.hash)} target="_blank" rel="noreferrer" aria-label="View transaction on Stellar">View</a>
                     </li>
                   );

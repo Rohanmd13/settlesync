@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import HeroFlow from "../components/HeroFlow";
+import InkField from "../components/InkField";
 import { Reveal, LivePill } from "../components/bits";
 import { useApp, go, ROLES } from "../lib/app";
 
@@ -22,6 +23,8 @@ export default function Landing() {
 
   return (
     <div className="landing">
+      <div className="hero-wrap">
+      <InkField />
       <section className="hero">
         <div className="hero__copy">
           <LivePill />
@@ -31,9 +34,9 @@ export default function Landing() {
             <span>it was for.</span>
           </h1>
           <p className="lede">
-            SettleSync is invoicing for India's freelancers, studios and builders who get paid in USDC on Stellar.
-            Every payment carries its invoice number, lands straight in your wallet, and marks the invoice paid by
-            itself. At tax time, one export gives your CA every payment with its INR value.
+            SettleSync is invoicing for freelancers, studios and builders who get paid in USDC on Stellar. Every
+            payment carries its invoice number, lands straight in your wallet, and marks the invoice paid by itself.
+            At tax time, one export gives your accountant every payment in rupees, or any currency you choose.
           </p>
           <div className="hero__cta">
             <button className="btn btn--primary btn--lg" onClick={() => go("/dashboard")}>
@@ -41,12 +44,13 @@ export default function Landing() {
             </button>
             <a href="#/how" className="btn btn--ghost btn--lg">See how it works</a>
           </div>
-          <p className="hero__fine">Works with Freighter, xBull, Albedo, LOBSTR and more. We never hold your money.</p>
+          <p className="hero__fine">Built in India, for freelancers everywhere. Works with Freighter, xBull, Albedo, LOBSTR and more. We never hold your money.</p>
         </div>
         <div className="hero__visual">
           <HeroFlow />
         </div>
       </section>
+      </div>
 
       <section className="band">
         <div className="band__inner">
@@ -71,13 +75,14 @@ export default function Landing() {
       <section className="section" id="how">
         <div className="section__head">
           <h2>How it works</h2>
-          <div className="seg" role="tablist" aria-label="Two ways to get paid">
-            <button role="tab" aria-selected={flow === "link"} className={flow === "link" ? "is-on" : ""} onClick={() => setFlow("link")}>Send a pay link</button>
-            <button role="tab" aria-selected={flow === "wallet"} className={flow === "wallet" ? "is-on" : ""} onClick={() => setFlow("wallet")}>Request from their wallet</button>
+          <div className="seg" role="tablist" aria-label="Ways to get paid">
+            <button role="tab" aria-selected={flow === "link"} className={flow === "link" ? "is-on" : ""} onClick={() => setFlow("link")}>Pay link</button>
+            <button role="tab" aria-selected={flow === "wallet"} className={flow === "wallet" ? "is-on" : ""} onClick={() => setFlow("wallet")}>Wallet request</button>
+            <button role="tab" aria-selected={flow === "code"} className={flow === "code" ? "is-on" : ""} onClick={() => setFlow("code")}>Client pays first</button>
           </div>
         </div>
         <ol className="steps" key={flow}>
-          {(flow === "link" ? LINK_STEPS : WALLET_STEPS).map((s, i) => (
+          {(flow === "link" ? LINK_STEPS : flow === "wallet" ? WALLET_STEPS : CODE_STEPS).map((s, i) => (
             <li key={s.title} style={{ "--i": i }}>
               <h3>{s.title}</h3>
               <p>{s.body}</p>
@@ -87,7 +92,9 @@ export default function Landing() {
         <p className="section__note">
           {flow === "link"
             ? "Best when your client is new to Stellar: the link works on WhatsApp, email or Telegram, and they don't need a SettleSync account."
-            : "Best for regular clients: no link to forward. The request is delivered on Stellar itself, so it shows up wherever they open SettleSync."}
+            : flow === "wallet"
+              ? "Best for regular clients: no link to forward. The request is delivered on Stellar itself, so it shows up wherever they open SettleSync."
+              : "For advances, tips and bonuses: the client doesn't wait for an invoice. If the code is never redeemed, they take the money back."}
         </p>
       </section>
 
@@ -120,6 +127,7 @@ export default function Landing() {
           <dl className="arch__parts">
             <div><dt>Memo matching</dt><dd>Every Stellar payment can carry a short text memo. SettleSync puts the invoice number there, so a payment can only match one invoice.</dd></div>
             <div><dt>Requests on-chain</dt><dd>A wallet request is a tiny 0.0000001 XLM transfer whose memo carries the invoice number and amount. It reaches the client on any device, with no server in between.</dd></div>
+            <div><dt>Claim codes</dt><dd>A client can pay before any invoice exists. The money is locked in a one-time Stellar account; the code unlocks it into the freelancer's wallet, and the deposit returns to the client.</dd></div>
             <div><dt>USDC</dt><dd>Circle's dollar stablecoin, native on Stellar. One click in SettleSync lets your wallet accept it.</dd></div>
             <div><dt>Any wallet</dt><dd>Stellar Wallets Kit connects Freighter, xBull, Albedo, LOBSTR, Hana, Rabet and more. Signing always happens inside your wallet.</dd></div>
             <div><dt>Your name, on your account</dt><dd>When you send a request, your display name is saved on your own Stellar account, so clients see who is asking.</dd></div>
@@ -164,12 +172,21 @@ const WALLET_STEPS = [
   { title: "Paid, matched, done", body: "They tap Pay. You see the invoice stamp itself paid on your side within seconds." },
 ];
 
+const CODE_STEPS = [
+  { title: "Client picks an amount", body: "In Send money, they choose USDC or XLM and add a note like 'Advance for the website'." },
+  { title: "A claim code is made", body: "The money leaves their wallet into a one-time code on Stellar. Nobody, including SettleSync, can touch it." },
+  { title: "Share it anywhere", body: "A link or code on WhatsApp or email. Whoever has it can redeem it, so it's treated like cash." },
+  { title: "Freelancer redeems", body: "Paste it in SettleSync and it lands in their wallet in seconds. Not used? The client takes it back." },
+];
+
 const FAQ = [
+  { q: "Is SettleSync only for India?", a: "It started in India, so rupees, GSTIN and CA exports come built in. But it works anywhere USDC does: pick your currency in your profile and totals and exports follow it. We're opening it worldwide after the pilot." },
+  { q: "Can a client pay before I send an invoice?", a: "Yes. They create a claim code from Send money and share it with you. You redeem it into your wallet; if you never do, they can take the money back." },
   { q: "Does SettleSync ever hold my money?", a: "No. Payments go directly from your client's wallet to yours on Stellar. SettleSync only reads the public network to see which invoice a payment was for." },
   { q: "Does my client need a SettleSync account?", a: "No. With a pay link, they just open it and pay with any Stellar wallet. If they also use SettleSync, your requests can reach them directly, with no link at all." },
   { q: "Which wallets work?", a: "Freighter, xBull, Albedo, LOBSTR, Hana, Rabet and other wallets supported by Stellar Wallets Kit. Albedo works right in the browser with nothing to install." },
   { q: "Is this real money?", a: "Not yet. The pilot runs on Stellar testnet, where XLM and USDC are free test tokens. Mainnet comes after the pilot." },
-  { q: "What does the CA export contain?", a: "One row per payment: invoice number, client, date, amount, the INR rate on that day from CoinGecko, the INR value, and a link to the transaction as proof. It's a record for your CA, not tax advice." },
-  { q: "Where are my invoices stored?", a: "In your browser, tied to your wallet. Invoices you send as wallet requests are also recorded on Stellar and come back automatically on a new device. You can download a backup any time from Profile and backup." },
+  { q: "What does the accountant export contain?", a: "One row per payment: invoice number, client, date, amount, the rate in your currency on that day from CoinGecko, the converted value, and a link to the transaction as proof. It's a record for your CA or accountant, not tax advice." },
+  { q: "Where are my invoices stored?", a: "In your browser, tied to your wallet. Invoices you send as wallet requests are also recorded on Stellar and come back automatically on a new device. You can download a backup any time from your profile." },
   { q: "What if a client pays only part of the invoice?", a: "SettleSync adds up every payment with that invoice number. The invoice shows 'Part paid' with the amount received until the rest arrives." },
 ];

@@ -7,6 +7,7 @@ import {
   Memo,
   BASE_FEE,
   StrKey,
+  Keypair,
 } from "@stellar/stellar-sdk";
 
 // SettleSync runs on Stellar testnet for the pilot. Switching to mainnet means
@@ -26,6 +27,10 @@ export const USDC_ISSUER = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLL
 // transfer to the client whose memo carries the invoice ID and amount.
 export const REQUEST_NUDGE = "0.0000001";
 export const PROFILE_DATA_KEY = "ss.name";
+
+// SettleSync's own treasury wallet: receives Pro subscriptions (testnet).
+export const TREASURY = "GBVWXQHFINYU67NT2OATHHHNZTPVXN5VE5TPHVY65M3LQ5JHDIOY32C7";
+export const PRO_PRICE = { USDC: "3", XLM: "30" };
 
 export const horizon = new Horizon.Server(NETWORK.horizonUrl);
 
@@ -210,4 +215,143 @@ export async function getLatestLedger() {
 export async function fundWithFriendbot(address) {
   const r = await fetch(`https://friendbot.stellar.org?addr=${encodeURIComponent(address)}`);
   if (!r.ok) throw new Error("Friendbot didn't respond. Try again in a minute.");
+}
+
+
+// ---------- direct payments ----------
+// Client pays someone without an invoice; an optional note rides in the memo.
+export async function buildDirectPayment({ from, to, amount, assetCode, note }) {
+  const tb = await builder(from);
+  tb.addOperation(Operation.payment({ destination: to, asset: assetFor(assetCode), amount: String(amount) }));
+  const memo = (note || "").trim();
+  if (memo) tb.addMemo(Memo.text(clipBytes(memo, 28)));
+  return tb.setTimeout(180).build().toXDR();
+}
+
+export function clipBytes(str, max) {
+  const enc = new TextEncoder();
+  let out = "";
+  for (const ch of str) {
+    if (enc.encode(out + ch).length > max) break;
+    out += ch;
+  }
+  return out;
+}
+
+// ---------- claim codes ----------
+// The payer locks money in a fresh one-time Stellar account. The "code" is that
+// account's secret key. Whoever redeems it moves the money to their own wallet,
+// and the small XLM deposit that kept the account open goes back to the payer.
+const CODE_KEYS = { from: "ss.from", amt: "ss.amt", name: "ss.name", note: "ss.note" };
+
+export function codeId(publicKey) {
+  return publicKey.slice(1, 9);
+}
+
+export async function buildClaimCode({ from, amount, assetCode, note, fromName }) {
+  const eph = Keypair.random();
+  const e = eph.publicKey();
+  const entries = 2 + (fromName ? 1 : 0) + (note ? 1 : 0);
+  const reserve = 1 + entries * 0.5 + (assetCode === "USDC" ? 0.5 : 0) + 0.5; // base + entries + trustline + fee buffer
+  const starting = assetCode === "XLM" ? (Number(amount) + reserve).toFixed(7) : reserve.toFixed(7);
+  const tb = await builder(from);
+  tb.addOperation(Operation.createAccount({ destination: e, startingBalance: starting }));
+  tb.addOperation(Operation.manageData({ name: CODE_KEYS.from, value: from, source: e }));
+  tb.addOperation(Operation.manageData({ name: CODE_KEYS.amt, value: `${amount} ${assetCode}`, source: e }));
+  if (fromName) tb.addOperation(Operation.manageData({ name: CODE_KEYS.name, value: clipBytes(fromName, 60), source: e }));
+  if (note) tb.addOperation(Operation.manageData({ name: CODE_KEYS.note, value: clipBytes(note, 60), source: e }));
+  if (assetCode === "USDC") {
+    tb.addOperation(Operation.changeTrust({ asset: assetFor("USDC"), source: e }));
+    tb.addOperation(Operation.payment({ destination: e, asset: assetFor("USDC"), amount: String(amount) }));
+  }
+  const xdr = tb.addMemo(Memo.text(`C:${codeId(e)}`)).setTimeout(180).build().toXDR();
+  return { xdr, secret: eph.secret(), publicKey: e };
+}
+
+// Adds the one-time account's signature after the payer's wallet has signed.
+export function cosignWithCode(signedXdr, secret) {
+  const tx = TransactionBuilder.fromXDR(signedXdr, NETWORK.passphrase);
+  tx.sign(Keypair.fromSecret(secret));
+  return tx.toXDR();
+}
+
+export function isCodeSecret(s) {
+  return typeof s === "string" && StrKey.isValidEd25519SecretSeed(s.trim());
+}
+
+// What a code holds, read straight from Stellar. null = already redeemed or invalid.
+export async function readClaimCode(secret) {
+  const pub = Keypair.fromSecret(secret.trim()).publicKey();
+  let acc;
+  try {
+    acc = await horizon.loadAccount(pub);
+  } catch (e) {
+    if (e?.response?.status === 404) return null;
+    throw e;
+  }
+  const d = (k) => (acc.data_attr?.[k] ? decodeB64(acc.data_attr[k]) : null);
+  const [amount, assetCode] = (d(CODE_KEYS.amt) || "").split(" ");
+  return {
+    publicKey: pub,
+    id: codeId(pub),
+    from: d(CODE_KEYS.from),
+    fromName: d(CODE_KEYS.name),
+    note: d(CODE_KEYS.note),
+    amount,
+    assetCode,
+  };
+}
+
+export async function buildRedeem({ secret, to }) {
+  const code = await readClaimCode(secret);
+  if (!code) throw new Error("This code has already been redeemed, or it isn't a SettleSync code.");
+  const eph = Keypair.fromSecret(secret.trim());
+  const acc = await horizon.loadAccount(code.publicKey);
+  const tb = new TransactionBuilder(acc, { fee: BASE_FEE, networkPassphrase: NETWORK.passphrase });
+  tb.addOperation(Operation.payment({ destination: to, asset: assetFor(code.assetCode), amount: code.amount }));
+  if (code.assetCode === "USDC") tb.addOperation(Operation.changeTrust({ asset: assetFor("USDC"), limit: "0" }));
+  for (const k of Object.values(CODE_KEYS)) if (acc.data_attr?.[k]) tb.addOperation(Operation.manageData({ name: k, value: null }));
+  tb.addOperation(Operation.accountMerge({ destination: code.from || to }));
+  tb.addMemo(Memo.text(`K:${code.id}`));
+  const tx = tb.setTimeout(180).build();
+  tx.sign(eph);
+  return { xdr: tx.toXDR(), code };
+}
+
+// ---------- Pro subscription ----------
+export async function buildProPayment({ from, assetCode, publicName }) {
+  const tb = await builder(from);
+  if (publicName) tb.addOperation(Operation.manageData({ name: PROFILE_DATA_KEY, value: clipBytes(publicName, 60) }));
+  return tb
+    .addOperation(Operation.payment({ destination: TREASURY, asset: assetFor(assetCode), amount: PRO_PRICE[assetCode] }))
+    .addMemo(Memo.text("PRO:1M"))
+    .setTimeout(180)
+    .build()
+    .toXDR();
+}
+
+export function proStatus(payments, me) {
+  const last = payments
+    .filter((p) => p.direction === "out" && p.from === me && p.to === TREASURY && (p.memo || "").startsWith("PRO"))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  if (!last) return { active: false };
+  const until = new Date(new Date(last.createdAt).getTime() + 30 * 864e5);
+  return { active: until > new Date(), until: until.toISOString(), since: last.createdAt };
+}
+
+// Testnet only: swap test XLM for test USDC on Stellar's built-in exchange,
+// so anyone can try USDC invoices without hunting for a faucet.
+export async function buildTestUsdcSwap({ address, xlm = "100", addTrustline = false }) {
+  const tb = await builder(address);
+  if (addTrustline) tb.addOperation(Operation.changeTrust({ asset: assetFor("USDC") }));
+  tb.addOperation(
+    Operation.pathPaymentStrictSend({
+      sendAsset: Asset.native(),
+      sendAmount: xlm,
+      destination: address,
+      destAsset: assetFor("USDC"),
+      destMin: "0.0000001",
+    })
+  );
+  return tb.setTimeout(180).build().toXDR();
 }

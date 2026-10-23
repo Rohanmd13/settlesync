@@ -10,16 +10,16 @@ import {
   STATUS_LABEL,
   formatAmount,
   formatDate,
-  formatINR,
   remainingOf,
 } from "../../lib/invoices";
 import { NETWORK, shortAddr, isValidAddress, requestMemoFits } from "../../lib/stellar";
 import { sendPaymentRequest } from "../../lib/actions";
 import { buildLedgerCsv, downloadText } from "../../lib/csv";
+import { formatFiat } from "../../lib/inr";
 
 const FILTERS = { all: "All", open: "Open", overdue: "Overdue", paid: "Paid" };
 
-export default function InvoicesTab({ invoices, persist, rawInvoices, account, justPaid, setNotice, onRequested, rates }) {
+export default function InvoicesTab({ invoices, persist, rawInvoices, account, justPaid, setNotice, onRequested, rates, fiat = "INR" }) {
   const { address, profile } = useApp();
   const [selectedId, setSelectedId] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -150,7 +150,7 @@ export default function InvoicesTab({ invoices, persist, rawInvoices, account, j
                       </span>
                       <span className="ledger__amt">
                         {formatAmount(inv.amount, inv.assetCode)}
-                        {r && <small>{formatINR(Number(inv.amount) * r)}</small>}
+                        {r && <small>{formatFiat(Number(inv.amount) * r, fiat)}</small>}
                       </span>
                       <span className={`pill pill--${s}`}>{STATUS_LABEL[s]}</span>
                     </button>
