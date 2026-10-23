@@ -2,16 +2,17 @@ import { formatAmount, formatDate, STATUS_LABEL } from "../lib/invoices";
 import { shortAddr } from "../lib/stellar";
 
 // The invoice as a ledger page: red bahi-khata spine on the left, ruled lines,
-// and a PAID stamp that lands when a matching payment arrives.
-export default function InvoiceSheet({ inv, status = "pending", stampKey, compact = false }) {
+// and a violet PAID stamp (Indian office stamp-pad ink) when a payment matches.
+export default function InvoiceSheet({ inv, status = "pending", stampKey, printable = false }) {
   return (
-    <article className={`sheet ${compact ? "sheet--compact" : ""}`} aria-label={`Invoice ${inv.id}`}>
+    <article className={`sheet ${printable ? "print-target" : ""}`} aria-label={`Invoice ${inv.id}`}>
       <div className="sheet__spine" aria-hidden="true" />
       <div className="sheet__body">
         <header className="sheet__head">
           <div>
             <p className="sheet__from">{inv.fromName || "Freelancer"}</p>
-            <p className="sheet__addr" title={inv.to}>{shortAddr(inv.to)}</p>
+            {inv.gstin && <p className="sheet__meta">GSTIN {inv.gstin}</p>}
+            <p className="sheet__meta" title={inv.to}>{shortAddr(inv.to)}</p>
           </div>
           <div className="sheet__id">
             <span>Invoice</span>
@@ -36,6 +37,7 @@ export default function InvoiceSheet({ inv, status = "pending", stampKey, compac
         )}
 
         <p className={`sheet__status sheet__status--${status}`}>{STATUS_LABEL[status]}</p>
+        <p className="sheet__foot">Pay on Stellar with memo {inv.id}. Settled wallet to wallet; SettleSync never holds funds.</p>
       </div>
 
       {status === "paid" && (

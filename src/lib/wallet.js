@@ -1,56 +1,112 @@
+// Multi-wallet support through Stellar Wallets Kit (Freighter, xBull, Albedo,
+// LOBSTR, Hana, Rabet, …). The kit remembers the chosen wallet in this browser.
 import {
-  isConnected,
-  requestAccess,
-  getAddress,
-  getNetwork,
-  signTransaction,
-} from "@stellar/freighter-api";
+  StellarWalletsKit,
+  Networks,
+  KitEventType,
+  SwkAppLightTheme,
+  SwkAppDarkTheme,
+} from "@creit.tech/stellar-wallets-kit";
+import { defaultModules } from "@creit.tech/stellar-wallets-kit/modules/utils";
 import { NETWORK } from "./stellar";
 
-export class WalletError extends Error {}
+let initialised = false;
 
-export async function freighterInstalled() {
+function kitTheme(mode) {
+  const base = mode === "dark" ? SwkAppDarkTheme : SwkAppLightTheme;
+  return {
+    ...base,
+    primary: mode === "dark" ? "#e2474d" : "#a3161c",
+    "primary-foreground": "#ffffff",
+    "border-radius": "10px",
+    "font-family": '"Archivo", system-ui, sans-serif',
+  };
+}
+
+export function initWallets(mode = "light") {
+  if (initialised) return;
+  StellarWalletsKit.init({
+    modules: defaultModules(),
+    network: Networks.TESTNET,
+    theme: kitTheme(mode),
+    authModal: { showInstallLabel: true },
+  });
+  initialised = true;
+}
+
+export function setWalletTheme(mode) {
+  if (!initialised) return;
   try {
-    const r = await isConnected();
-    return !!r.isConnected;
+    StellarWalletsKit.setTheme(kitTheme(mode));
   } catch {
-    return false;
+    /* cosmetic only */
   }
 }
 
-// Returns the address if this site was already allowed, without a popup.
-export async function getConnectedAddress() {
-  if (!(await freighterInstalled())) return null;
-  const { address, error } = await getAddress();
-  if (error || !address) return null;
-  return address;
+function message(e, fallback) {
+  if (!e) return fallback;
+  if (typeof e === "string") return e;
+  return e.message || e.error?.message || fallback;
 }
 
 export async function connectWallet() {
-  if (!(await freighterInstalled())) {
-    throw new WalletError("Freighter isn't installed. Add it from freighter.app, then reload this page.");
+  try {
+    const { address } = await StellarWalletsKit.authModal();
+    if (!address) throw new Error("No address was shared.");
+    return address;
+  } catch (e) {
+    throw new Error(message(e, "The wallet didn't connect."));
   }
-  const { address, error } = await requestAccess();
-  if (error) throw new WalletError(error.message || "Freighter didn't share your address.");
-  return address;
+}
+
+export async function restoreAddress() {
+  try {
+    const { address } = await StellarWalletsKit.getAddress();
+    return address || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function disconnectWallet() {
+  try {
+    await StellarWalletsKit.disconnect();
+  } catch {
+    /* already disconnected */
+  }
+}
+
+export function onWalletChange(cb) {
+  const offs = [
+    StellarWalletsKit.on(KitEventType.STATE_UPDATED, (e) => cb(e.payload?.address || null)),
+    StellarWalletsKit.on(KitEventType.DISCONNECT, () => cb(null)),
+  ];
+  return () => offs.forEach((off) => typeof off === "function" && off());
 }
 
 export async function checkNetwork() {
-  const { networkPassphrase, error } = await getNetwork();
-  if (error) return { ok: false, message: "Couldn't read Freighter's network." };
-  if (networkPassphrase !== NETWORK.passphrase) {
-    return { ok: false, message: "Freighter is on the wrong network. Open Freighter → Settings → Network and choose Testnet." };
+  try {
+    const { networkPassphrase } = await StellarWalletsKit.getNetwork();
+    if (networkPassphrase && networkPassphrase !== NETWORK.passphrase) {
+      return { ok: false, message: "Your wallet is on the wrong network. Switch it to Testnet in the wallet's settings." };
+    }
+  } catch {
+    /* some wallets (e.g. Albedo) don't report a network; signing still targets testnet */
   }
   return { ok: true };
 }
 
 export async function signWithWallet(xdr, address) {
   const net = await checkNetwork();
-  if (!net.ok) throw new WalletError(net.message);
-  const { signedTxXdr, error } = await signTransaction(xdr, {
-    networkPassphrase: NETWORK.passphrase,
-    address,
-  });
-  if (error) throw new WalletError(error.message || "The transaction wasn't signed.");
-  return signedTxXdr;
+  if (!net.ok) throw new Error(net.message);
+  try {
+    const { signedTxXdr } = await StellarWalletsKit.signTransaction(xdr, {
+      networkPassphrase: NETWORK.passphrase,
+      address,
+    });
+    if (!signedTxXdr) throw new Error("The transaction wasn't signed.");
+    return signedTxXdr;
+  } catch (e) {
+    throw new Error(message(e, "The transaction wasn't signed."));
+  }
 }

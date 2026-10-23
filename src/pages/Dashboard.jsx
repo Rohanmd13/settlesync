@@ -1,187 +1,232 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import InvoiceSheet from "../components/InvoiceSheet";
-import {
-  NETWORK,
-  getAccountInfo,
-  getIncomingPayments,
-  buildUsdcTrustline,
-  submitSigned,
-  shortAddr,
-} from "../lib/stellar";
-import { connectWallet, getConnectedAddress, signWithWallet, checkNetwork } from "../lib/wallet";
+import { useApp, go, ROLES } from "../lib/app";
+import { getAccountInfo, getAccountPayments, fundWithFriendbot, getPublicName } from "../lib/stellar";
 import {
   loadInvoices,
   saveInvoices,
-  newInvoiceId,
-  payLinkFor,
   matchPayments,
+  billsFor,
+  mergeRequestedFromChain,
   statusOf,
-  STATUS_LABEL,
-  formatAmount,
-  formatDate,
+  formatINR,
+  invoicesThisMonth,
+  FREE_INVOICES_PER_MONTH,
 } from "../lib/invoices";
-import { buildLedgerCsv, downloadText } from "../lib/csv";
+import { liveInrRates } from "../lib/inr";
+import { enableUsdc } from "../lib/actions";
+import { WalletIcon } from "../components/Icons";
+import InvoicesTab from "./dash/InvoicesTab";
+import BillsTab from "./dash/BillsTab";
+import HistoryTab from "./dash/HistoryTab";
+import SettingsTab from "./dash/SettingsTab";
 
 const POLL_MS = 8000;
-const PROFILE_KEY = "settlesync:profile";
-
-function loadProfile() {
-  try {
-    return JSON.parse(localStorage.getItem(PROFILE_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
 
 export default function Dashboard() {
-  const [address, setAddress] = useState(null);
-  const [checking, setChecking] = useState(true);
-  const [error, setError] = useState("");
-  const [netWarning, setNetWarning] = useState("");
+  const { address, walletReady, connect, profile } = useApp();
+  const [err, setErr] = useState("");
 
-  useEffect(() => {
-    getConnectedAddress()
-      .then((a) => a && setAddress(a))
-      .finally(() => setChecking(false));
-  }, []);
-
-  useEffect(() => {
-    if (!address) return;
-    checkNetwork().then((r) => setNetWarning(r.ok ? "" : r.message));
-  }, [address]);
-
-  const connect = async () => {
-    setError("");
-    try {
-      setAddress(await connectWallet());
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
-  if (checking) return <section className="page page--narrow"><p className="muted">Checking for Freighter…</p></section>;
+  if (!walletReady) return <section className="page page--narrow"><p className="muted">Loading your wallet…</p></section>;
 
   if (!address) {
+    const onConnect = async () => {
+      setErr("");
+      try {
+        await connect();
+      } catch (e) {
+        if (!/closed|cancel/i.test(e.message)) setErr(e.message);
+      }
+    };
     return (
       <section className="page page--narrow connect">
-        <h1>Your invoices, matched to every payment</h1>
-        <p>Connect the Freighter wallet you get paid into. SettleSync never holds your money and never asks for your secret phrase.</p>
-        <button className="btn btn--primary" onClick={connect}>Connect Freighter</button>
-        {error && <p className="alert alert--error">{error}</p>}
-        <p className="muted small">
-          No Freighter yet? Install it from <a href="https://freighter.app" target="_blank" rel="noreferrer">freighter.app</a>, switch it to Testnet, then come back.
+        <h1>Connect your wallet to open your dashboard</h1>
+        <p className="lede">
+          Use the Stellar wallet you get paid into, or pay from. SettleSync never holds your money and never asks for your secret phrase.
         </p>
+        <button className="btn btn--primary btn--lg" onClick={onConnect}><WalletIcon /> Connect wallet</button>
+        {err && <p className="alert alert--error">{err}</p>}
+        <div className="connect__help">
+          <p><b>No wallet yet?</b> Albedo works in your browser with nothing to install. Freighter is a Chrome extension from freighter.app.</p>
+          <p><b>On testnet.</b> Switch your wallet's network to Testnet. Test money is free.</p>
+        </div>
       </section>
     );
   }
 
-  return <Workspace address={address} netWarning={netWarning} onDisconnect={() => setAddress(null)} />;
+  if (!profile.role) return <Onboarding />;
+  return <Workspace key={address} />;
 }
 
-function Workspace({ address, netWarning, onDisconnect }) {
+function Onboarding() {
+  const { updateProfile } = useApp();
+  const pending = (() => {
+    try { return sessionStorage.getItem("settlesync:pending-role"); } catch { return null; }
+  })();
+  const [role, setRole] = useState(pending && ROLES[pending] ? pending : "freelancer");
+  const [name, setName] = useState("");
+  const [gstin, setGstin] = useState("");
+
+  const save = (e) => {
+    e.preventDefault();
+    try { sessionStorage.removeItem("settlesync:pending-role"); } catch { /* ignore */ }
+    updateProfile({ role, name: name.trim(), gstin: role === "business" ? gstin.trim().toUpperCase() : "" });
+    go(role === "client" ? "/dashboard/bills" : "/dashboard/invoices");
+  };
+
+  return (
+    <section className="page page--narrow onboard">
+      <h1>How will you use SettleSync?</h1>
+      <p className="lede">Your dashboard arranges itself around this. You can change it any time in Profile and backup.</p>
+      <form onSubmit={save} className="onboard__form">
+        <div className="role-pick" role="radiogroup" aria-label="Your role">
+          {Object.entries(ROLES).map(([key, r]) => (
+            <label key={key} className={`role-pick__opt ${role === key ? "is-on" : ""}`}>
+              <input type="radio" name="role" value={key} checked={role === key} onChange={() => setRole(key)} />
+              <b>{r.label}</b>
+              <span>{r.blurb}</span>
+            </label>
+          ))}
+        </div>
+        <label className="field">
+          {role === "business" ? "Business name" : "Your name"}
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={role === "business" ? "Kite Studio Pvt Ltd" : "Ananya Rao"} />
+          <small>Shown on your invoices and payment requests.</small>
+        </label>
+        {role === "business" && (
+          <label className="field">
+            GSTIN <span className="muted">(optional)</span>
+            <input value={gstin} onChange={(e) => setGstin(e.target.value)} placeholder="29ABCDE1234F1Z5" maxLength={15} />
+          </label>
+        )}
+        <button className="btn btn--primary btn--lg" type="submit">Open my dashboard</button>
+      </form>
+    </section>
+  );
+}
+
+const TABS = {
+  invoices: "Invoices",
+  bills: "Bills to pay",
+  history: "History",
+  settings: "Profile and backup",
+};
+
+function Workspace() {
+  const { address, route, profile } = useApp();
+  const role = profile.role;
+  const order = role === "client" ? ["bills", "history", "invoices", "settings"] : ["invoices", "bills", "history", "settings"];
+  const sub = route.split("/")[2];
+  const tab = TABS[sub] ? sub : order[0];
+
   const [invoices, setInvoices] = useState(() => loadInvoices(address));
   const [payments, setPayments] = useState([]);
   const [account, setAccount] = useState(null);
+  const [rates, setRates] = useState(null);
   const [lastSync, setLastSync] = useState(null);
   const [syncError, setSyncError] = useState("");
-  const [selectedId, setSelectedId] = useState(null);
-  const [showForm, setShowForm] = useState(false);
-  const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState(null);
+  const [busy, setBusy] = useState("");
   const [justPaid, setJustPaid] = useState({});
+  const [names, setNames] = useState({});
+  const [hideUpsell, setHideUpsell] = useState(() => {
+    try { return sessionStorage.getItem("settlesync:hide-upsell") === "1"; } catch { return false; }
+  });
   const paidBefore = useRef(null);
 
-  const persist = (list) => {
-    setInvoices(list);
-    saveInvoices(address, list);
-  };
+  const persist = useCallback(
+    (list) => {
+      setInvoices(list);
+      saveInvoices(address, list);
+    },
+    [address]
+  );
 
   const refreshAccount = useCallback(async () => {
     try {
       setAccount(await getAccountInfo(address));
     } catch {
-      /* shown via syncError on next payments call */
+      /* surfaced by sync */
     }
   }, [address]);
 
   const sync = useCallback(async () => {
     try {
-      const p = await getIncomingPayments(address);
+      const p = await getAccountPayments(address);
       setPayments(p);
       setSyncError("");
       setLastSync(new Date());
     } catch (e) {
       if (e?.response?.status === 404) {
         setPayments([]);
+        setLastSync(new Date());
         setSyncError("");
-      } else {
-        setSyncError("Couldn't reach the Stellar network. Retrying…");
-      }
+      } else setSyncError("Can't reach Stellar right now. Retrying…");
     }
   }, [address]);
 
   useEffect(() => {
     refreshAccount();
     sync();
+    liveInrRates().then(setRates);
     const t = setInterval(sync, POLL_MS);
     return () => clearInterval(t);
   }, [refreshAccount, sync]);
 
-  const matched = useMemo(() => matchPayments(invoices, payments), [invoices, payments]);
-
-  // Detect invoices that became paid during this session → stamp + notice.
+  // Bring back invoices this wallet requested on-chain (new device / cleared browser).
   useEffect(() => {
-    const nowPaid = new Set(matched.filter((i) => i.paidAt).map((i) => i.id));
-    if (paidBefore.current === null) {
-      if (lastSync) paidBefore.current = nowPaid; // first successful sync: baseline only
-      return;
-    }
-    const fresh = [...nowPaid].filter((id) => !paidBefore.current.has(id));
+    const merged = mergeRequestedFromChain(invoices, payments, address);
+    if (merged) persist(merged);
+  }, [payments, invoices, address, persist]);
+
+  const matched = useMemo(() => matchPayments(invoices, payments), [invoices, payments]);
+  const bills = useMemo(() => billsFor(address, payments), [address, payments]);
+
+  // Look up requesters' public names for bills.
+  useEffect(() => {
+    const missing = [...new Set(bills.map((b) => b.to))].filter((a) => !(a in names));
+    if (!missing.length) return;
+    Promise.all(missing.map(async (a) => [a, await getPublicName(a)])).then((pairs) =>
+      setNames((n) => ({ ...n, ...Object.fromEntries(pairs) }))
+    );
+  }, [bills, names]);
+
+  // Stamp + notice when an invoice that was open earlier in this session becomes paid.
+  useEffect(() => {
+    if (!lastSync) return;
+    const prev = paidBefore.current; // Map id -> paid?
+    const now = new Map(matched.map((i) => [i.id, !!i.paidAt]));
+    paidBefore.current = now;
+    if (!prev) return;
+    const fresh = [...now].filter(([id, paid]) => paid && prev.get(id) === false).map(([id]) => id);
     if (fresh.length) {
       const stamp = Date.now();
       setJustPaid((m) => ({ ...m, ...Object.fromEntries(fresh.map((id) => [id, stamp])) }));
       setNotice({ kind: "success", text: `Payment matched to ${fresh.join(", ")}. Marked as paid.` });
-      setSelectedId(fresh[0]);
       refreshAccount();
     }
-    paidBefore.current = nowPaid;
   }, [matched, lastSync, refreshAccount]);
 
-  const selected = matched.find((i) => i.id === selectedId) || null;
-
-  const totals = useMemo(() => {
-    const t = { pending: 0, paid: 0, count: matched.length };
-    for (const i of matched) {
-      const s = statusOf(i);
-      if (s === "paid") t.paid += 1;
-      else t.pending += 1;
-    }
-    return t;
-  }, [matched]);
-
-  const fundWithFriendbot = async () => {
+  const doFund = async () => {
     setBusy("fund");
     setNotice(null);
     try {
-      const r = await fetch(`https://friendbot.stellar.org?addr=${encodeURIComponent(address)}`);
-      if (!r.ok) throw new Error();
+      await fundWithFriendbot(address);
       setNotice({ kind: "success", text: "Funded with 10,000 test XLM." });
       await refreshAccount();
-    } catch {
-      setNotice({ kind: "error", text: "Friendbot didn't respond. Try the Fund button inside Freighter instead." });
+      sync();
+    } catch (e) {
+      setNotice({ kind: "error", text: e.message });
     } finally {
       setBusy("");
     }
   };
 
-  const enableUsdc = async () => {
+  const doEnableUsdc = async () => {
     setBusy("trust");
     setNotice(null);
     try {
-      const xdr = await buildUsdcTrustline(address);
-      const signed = await signWithWallet(xdr, address);
-      await submitSigned(signed);
-      setNotice({ kind: "success", text: "USDC enabled. You can now receive USDC invoices." });
+      await enableUsdc(address);
+      setNotice({ kind: "success", text: "USDC enabled. Your wallet can now receive and hold USDC." });
       await refreshAccount();
     } catch (e) {
       setNotice({ kind: "error", text: e.message });
@@ -190,259 +235,138 @@ function Workspace({ address, netWarning, onDisconnect }) {
     }
   };
 
-  const createInvoice = (data) => {
-    const inv = {
-      id: newInvoiceId(),
-      to: address,
-      createdAt: new Date().toISOString(),
-      ...data,
-    };
-    persist([inv, ...invoices]);
-    setSelectedId(inv.id);
-    setShowForm(false);
-    setNotice({ kind: "success", text: `Invoice ${inv.id} created. Send the pay link to your client.` });
-  };
-
-  const deleteInvoice = (id) => {
-    if (!window.confirm(`Delete invoice ${id}? Payments already received stay in your wallet.`)) return;
-    persist(invoices.filter((i) => i.id !== id));
-    setSelectedId(null);
-  };
-
-  const exportCsv = async () => {
-    setBusy("csv");
-    try {
-      const csv = await buildLedgerCsv(matched, address);
-      downloadText(`settlesync-ledger-${new Date().toISOString().slice(0, 10)}.csv`, csv);
-    } finally {
-      setBusy("");
+  // ---------- summary numbers ----------
+  const inr = (amt, code) => (rates?.[code] ? amt * rates[code] : null);
+  const ym = new Date().toISOString().slice(0, 7);
+  const summary = useMemo(() => {
+    let outstandingInr = 0, receivedInr = 0, overdue = 0, open = 0, toPayInr = 0, billsOpen = 0;
+    for (const i of matched) {
+      const s = statusOf(i);
+      if (s !== "paid") {
+        open += 1;
+        outstandingInr += inr(Number(i.amount) - (i.received || 0), i.assetCode) || 0;
+      }
+      if (s === "overdue") overdue += 1;
+      for (const p of i.payments || []) if (p.createdAt.startsWith(ym)) receivedInr += inr(Number(p.amount), p.assetCode) || 0;
     }
-  };
+    for (const b of bills) {
+      if (!b.paidAt) {
+        billsOpen += 1;
+        toPayInr += inr(Number(b.amount) - b.received, b.assetCode) || 0;
+      }
+    }
+    return { outstandingInr, receivedInr, overdue, open, toPayInr, billsOpen };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matched, bills, rates]);
+
+  const monthCount = invoicesThisMonth(invoices);
+  const showUpsell = !hideUpsell && tab === "invoices" && monthCount > FREE_INVOICES_PER_MONTH;
 
   const needsFunding = account && !account.exists;
   const needsUsdc = account && account.exists && !account.hasUsdcTrustline;
+  const greeting = profile.name ? `Namaste, ${profile.name.split(" ")[0]}` : "Your dashboard";
 
   return (
     <section className="page workspace">
       <header className="ws-head">
         <div>
-          <h1>Your ledger</h1>
-          <p className="muted">
-            <a href={NETWORK.explorerAccount(address)} target="_blank" rel="noreferrer" title={address}>{shortAddr(address)}</a>
-            {account?.exists && (
-              <> · {Number(account.xlm).toLocaleString("en-IN", { maximumFractionDigits: 2 })} XLM
-                {account.hasUsdcTrustline && <> · {Number(account.usdc).toLocaleString("en-IN", { maximumFractionDigits: 2 })} USDC</>}
-              </>
-            )}
-          </p>
+          <p className="ws-head__hello">{greeting}</p>
+          <h1>{TABS[tab]}</h1>
         </div>
-        <div className="ws-actions">
-          <button className="btn btn--ghost" onClick={exportCsv} disabled={!matched.length || busy === "csv"}>
-            {busy === "csv" ? "Preparing…" : "Export for my CA"}
-          </button>
-          <button className="btn btn--primary" onClick={() => { setShowForm(true); setSelectedId(null); }}>New invoice</button>
+        <div className="stats" aria-label="Summary">
+          {role === "client" ? (
+            <>
+              <Stat label="Left to pay" value={rates ? formatINR(summary.toPayInr) : "—"} sub={`${summary.billsOpen} open bills`} />
+              <Stat label="Wallet" value={account?.exists ? `${Number(account.usdc ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })} USDC` : "—"} sub={account?.exists ? `${Number(account.xlm).toLocaleString("en-IN", { maximumFractionDigits: 0 })} XLM` : "not active"} />
+            </>
+          ) : (
+            <>
+              <Stat label="Outstanding" value={rates ? formatINR(summary.outstandingInr) : "—"} sub={`${summary.open} open invoices`} />
+              <Stat label="Received this month" value={rates ? formatINR(summary.receivedInr) : "—"} sub="at today's rate" />
+              <Stat label="Overdue" value={String(summary.overdue)} sub={summary.overdue ? "send a reminder" : "all on time"} tone={summary.overdue ? "bad" : ""} />
+            </>
+          )}
         </div>
       </header>
 
-      {netWarning && <p className="alert alert--error">{netWarning}</p>}
-      {notice && <p className={`alert alert--${notice.kind}`} role="status">{notice.text}</p>}
+      <nav className="tabs" aria-label="Dashboard sections">
+        {order.map((t) => (
+          <a key={t} href={`#/dashboard/${t}`} className={`tabs__tab ${tab === t ? "is-on" : ""}`} aria-current={tab === t ? "page" : undefined}>
+            {TABS[t]}
+            {t === "bills" && summary.billsOpen > 0 && <span className="tabs__badge">{summary.billsOpen}</span>}
+            {t === "invoices" && summary.overdue > 0 && <span className="tabs__badge tabs__badge--bad">{summary.overdue}</span>}
+          </a>
+        ))}
+        <span className="tabs__sync" aria-live="polite">
+          <i className={syncError ? "is-off" : "is-on"} aria-hidden="true" />
+          {syncError || (lastSync ? "Watching Stellar for payments" : "Connecting…")}
+        </span>
+      </nav>
 
-      {(needsFunding || needsUsdc) && (
+      {notice && (
+        <p className={`alert alert--${notice.kind}`} role="status">
+          {notice.text}
+          <button className="alert__x" onClick={() => setNotice(null)} aria-label="Dismiss">×</button>
+        </p>
+      )}
+
+      {(needsFunding || needsUsdc) && tab !== "settings" && (
         <div className="setup">
           <h2>Finish setting up your wallet</h2>
           {needsFunding && (
             <div className="setup__step">
               <p>Your wallet isn't active on testnet yet. Get free test XLM to activate it.</p>
-              <button className="btn btn--primary" onClick={fundWithFriendbot} disabled={busy === "fund"}>
-                {busy === "fund" ? "Funding…" : "Get test XLM"}
-              </button>
+              <button className="btn btn--primary" onClick={doFund} disabled={busy === "fund"}>{busy === "fund" ? "Funding…" : "Get test XLM"}</button>
             </div>
           )}
           {needsUsdc && (
             <div className="setup__step">
-              <p>To get paid in USDC, your wallet needs to accept it. This is a one-time approval in Freighter.</p>
-              <button className="btn btn--primary" onClick={enableUsdc} disabled={busy === "trust"}>
-                {busy === "trust" ? "Waiting for Freighter…" : "Enable USDC"}
-              </button>
+              <p>Let your wallet hold USDC. It's a one-time approval, needed to receive or pay in USDC.</p>
+              <button className="btn btn--primary" onClick={doEnableUsdc} disabled={busy === "trust"}>{busy === "trust" ? "Waiting for your wallet…" : "Enable USDC"}</button>
             </div>
           )}
         </div>
       )}
 
-      <div className="ws-grid">
-        <div className="ledger" aria-label="Invoices">
-          <div className="ledger__summary">
-            <span>{totals.count} invoices</span>
-            <span>{totals.paid} paid</span>
-            <span>{totals.pending} open</span>
-            <span className="ledger__sync">
-              {syncError || (lastSync ? `Watching for payments · checked ${lastSync.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : "Connecting…")}
-            </span>
-          </div>
-
-          {matched.length === 0 ? (
-            <div className="ledger__empty">
-              <p>No invoices yet. Create one and send the pay link to your client. When they pay, it's marked paid here automatically.</p>
-              <button className="btn btn--primary" onClick={() => setShowForm(true)}>Create your first invoice</button>
-            </div>
-          ) : (
-            <ul className="ledger__rows">
-              {matched.map((inv) => {
-                const s = statusOf(inv);
-                return (
-                  <li key={inv.id}>
-                    <button
-                      className={`ledger__row ${inv.id === selectedId ? "is-selected" : ""}`}
-                      onClick={() => { setSelectedId(inv.id); setShowForm(false); }}
-                    >
-                      <span className="ledger__client">
-                        <strong>{inv.client || "Unnamed client"}</strong>
-                        <small>{inv.id} · due {formatDate(inv.dueDate)}</small>
-                      </span>
-                      <span className="ledger__amt">{formatAmount(inv.amount, inv.assetCode)}</span>
-                      <span className={`pill pill--${s}`}>{STATUS_LABEL[s]}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+      {showUpsell && (
+        <div className="upsell" role="note">
+          <p>
+            You've created {monthCount} invoices this month. The free plan covers {FREE_INVOICES_PER_MONTH}; during the testnet pilot,
+            Pro is unlocked for everyone, so nothing changes for you. <a href="#/plans">See plans</a>
+          </p>
+          <button className="alert__x" aria-label="Dismiss" onClick={() => { setHideUpsell(true); try { sessionStorage.setItem("settlesync:hide-upsell", "1"); } catch { /* ignore */ } }}>×</button>
         </div>
+      )}
 
-        <aside className="panel">
-          {showForm ? (
-            <InvoiceForm
-              onCancel={() => setShowForm(false)}
-              onCreate={createInvoice}
-              usdcReady={!!account?.hasUsdcTrustline}
-            />
-          ) : selected ? (
-            <InvoiceDetail inv={selected} stampKey={justPaid[selected.id]} onDelete={() => deleteInvoice(selected.id)} />
-          ) : (
-            <div className="panel__empty">
-              <p>Select an invoice to see its pay link and payment record.</p>
-            </div>
-          )}
-        </aside>
+      <div className="tab-body" key={tab}>
+        {tab === "invoices" && (
+          <InvoicesTab
+            invoices={matched}
+            persist={persist}
+            rawInvoices={invoices}
+            account={account}
+            justPaid={justPaid}
+            setNotice={setNotice}
+            onRequested={sync}
+            rates={rates}
+          />
+        )}
+        {tab === "bills" && (
+          <BillsTab bills={bills} names={names} account={account} setNotice={setNotice} onPaid={() => { sync(); refreshAccount(); }} />
+        )}
+        {tab === "history" && <HistoryTab payments={payments} names={names} />}
+        {tab === "settings" && <SettingsTab invoices={invoices} persist={persist} account={account} />}
       </div>
-
-      <p className="muted small ws-foot">
-        Invoices are saved in this browser for this wallet. <button className="linkish" onClick={onDisconnect}>Use a different wallet</button>
-      </p>
     </section>
   );
 }
 
-function InvoiceForm({ onCancel, onCreate, usdcReady }) {
-  const profile = loadProfile();
-  const in14 = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10);
-  const [f, setF] = useState({
-    fromName: profile.fromName || "",
-    client: "",
-    description: "",
-    amount: "",
-    assetCode: "USDC",
-    dueDate: in14,
-  });
-  const [err, setErr] = useState("");
-  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
-
-  const submit = (e) => {
-    e.preventDefault();
-    const amt = Number(f.amount);
-    if (!f.client.trim()) return setErr("Add who you're billing.");
-    if (!(amt > 0)) return setErr("Enter an amount greater than zero.");
-    if (!/^\d+(\.\d{1,7})?$/.test(f.amount.trim())) return setErr("Use up to 7 decimal places.");
-    try {
-      localStorage.setItem(PROFILE_KEY, JSON.stringify({ fromName: f.fromName.trim() }));
-    } catch { /* ignore */ }
-    onCreate({ ...f, fromName: f.fromName.trim(), client: f.client.trim(), description: f.description.trim(), amount: f.amount.trim() });
-  };
-
+function Stat({ label, value, sub, tone = "" }) {
   return (
-    <form className="form" onSubmit={submit}>
-      <h2>New invoice</h2>
-      <label>Your name or business
-        <input value={f.fromName} onChange={set("fromName")} placeholder="Ekta Studio" autoComplete="organization" />
-      </label>
-      <label>Billing
-        <input value={f.client} onChange={set("client")} placeholder="Client or DAO name" required />
-      </label>
-      <label>For
-        <input value={f.description} onChange={set("description")} placeholder="Smart contract audit, October" />
-      </label>
-      <div className="form__row">
-        <label>Amount
-          <input value={f.amount} onChange={set("amount")} inputMode="decimal" placeholder="500" required />
-        </label>
-        <label>Paid in
-          <select value={f.assetCode} onChange={set("assetCode")}>
-            <option value="USDC">USDC</option>
-            <option value="XLM">XLM</option>
-          </select>
-        </label>
-      </div>
-      <label>Due date
-        <input type="date" value={f.dueDate} onChange={set("dueDate")} />
-      </label>
-      {f.assetCode === "USDC" && !usdcReady && (
-        <p className="alert alert--warn">Enable USDC on your wallet first (button above), or your client's payment will be rejected.</p>
-      )}
-      {err && <p className="alert alert--error">{err}</p>}
-      <div className="form__actions">
-        <button type="button" className="btn btn--ghost" onClick={onCancel}>Cancel</button>
-        <button type="submit" className="btn btn--primary">Create invoice</button>
-      </div>
-    </form>
-  );
-}
-
-function InvoiceDetail({ inv, stampKey, onDelete }) {
-  const link = payLinkFor(inv);
-  const [copied, setCopied] = useState(false);
-  const status = statusOf(inv);
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch {
-      window.prompt("Copy this pay link:", link);
-    }
-  };
-
-  return (
-    <div className="detail">
-      <InvoiceSheet inv={inv} status={status} stampKey={stampKey} />
-
-      {status !== "paid" && (
-        <div className="share">
-          <p className="share__label">Pay link for your client</p>
-          <div className="share__row">
-            <input readOnly value={link} onFocus={(e) => e.target.select()} aria-label="Pay link" />
-            <button className="btn btn--primary" onClick={copy}>{copied ? "Copied" : "Copy link"}</button>
-          </div>
-          <a className="small" href={link} target="_blank" rel="noreferrer">Open the client's pay page</a>
-        </div>
-      )}
-
-      {inv.payments?.length > 0 && (
-        <div className="receipts">
-          <p className="share__label">Payments matched to this invoice</p>
-          <ul>
-            {inv.payments.map((p) => (
-              <li key={p.id}>
-                <span>{formatAmount(p.amount, p.assetCode)}</span>
-                <span className="muted">{formatDate(p.createdAt)} from {shortAddr(p.from)}</span>
-                <a href={NETWORK.explorerTx(p.hash)} target="_blank" rel="noreferrer">View transaction</a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <button className="linkish danger small" onClick={onDelete}>Delete invoice</button>
+    <div className={`stat ${tone ? `stat--${tone}` : ""}`}>
+      <span className="stat__label">{label}</span>
+      <strong className="stat__value">{value}</strong>
+      {sub && <span className="stat__sub">{sub}</span>}
     </div>
   );
 }

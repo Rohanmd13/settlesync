@@ -1,9 +1,8 @@
-// INR value on the day a payment was received, for the CA export.
-// Uses CoinGecko's public daily history; cached in this browser so each
-// (asset, day) pair is fetched once.
+// INR values via CoinGecko's public API, cached in this browser.
 
 const COIN = { USDC: "usd-coin", XLM: "stellar" };
 const CACHE_KEY = "settlesync:inr-rates";
+const LIVE_TTL_MS = 10 * 60 * 1000;
 
 function readCache() {
   try {
@@ -20,6 +19,7 @@ function writeCache(c) {
   }
 }
 
+// Rate on the day a payment was received, for the CA export.
 export async function inrRateOn(assetCode, isoDateTime) {
   const coin = COIN[assetCode];
   if (!coin) return null;
@@ -43,5 +43,22 @@ export async function inrRateOn(assetCode, isoDateTime) {
     return rate;
   } catch {
     return null;
+  }
+}
+
+// Today's rates for the dashboard totals.
+export async function liveInrRates() {
+  const cache = readCache();
+  if (cache.live && Date.now() - cache.live.at < LIVE_TTL_MS) return cache.live.rates;
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=usd-coin,stellar&vs_currencies=inr");
+    if (!res.ok) return cache.live?.rates || null;
+    const j = await res.json();
+    const rates = { USDC: j["usd-coin"]?.inr ?? null, XLM: j.stellar?.inr ?? null };
+    cache.live = { at: Date.now(), rates };
+    writeCache(cache);
+    return rates;
+  } catch {
+    return cache.live?.rates || null;
   }
 }
