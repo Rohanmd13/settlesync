@@ -73,6 +73,7 @@ export async function buildHistoryCsv(payments, owner, fiat = "INR") {
 
 export function describePayment(p) {
   const memo = p.memo || "";
+  if (p.type === "create") return { kind: "other", label: p.direction === "in" ? "Wallet activated (starting balance)" : "Activated another wallet" };
   if (memo.startsWith("C:")) return { kind: "code", label: p.direction === "out" ? "Claim code created" : "Claim code funded" };
   if (memo.startsWith("K:")) return { kind: "invoice", label: p.direction === "in" ? "Claim code redeemed" : "Claim code sent" };
   if (memo.startsWith("PRO")) return { kind: "invoice", label: p.direction === "out" ? "SettleSync Pro subscription" : "Pro subscription received" };

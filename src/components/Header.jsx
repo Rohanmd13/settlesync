@@ -16,7 +16,7 @@ export function Avatar({ name, address, size = 34 }) {
 }
 
 export default function Header() {
-  const { route, theme, toggleTheme, address, connect, disconnect, profile } = useApp();
+  const { route, theme, toggleTheme, address, connect, disconnect, profile, wrongNetwork } = useApp();
   const [open, setOpen] = useState(false);
   const [acct, setAcct] = useState(false);
   const [err, setErr] = useState("");
@@ -136,6 +136,11 @@ export default function Header() {
         </div>
       </header>
       {err && <p className="alert alert--error topbar__err" role="alert">{err}</p>}
+      {wrongNetwork && (
+        <div className="net-banner" role="alert">
+          <b>Your wallet is on Main Net.</b> SettleSync is in its testnet pilot, so switch your wallet's network to <b>Testnet</b> (in Freighter: the network menu at the top). No real money is used here.
+        </div>
+      )}
 
       <div className={`drawer-scrim ${open ? "is-open" : ""}`} onClick={() => setOpen(false)} aria-hidden="true" />
       <aside id="site-menu" className={`drawer ${open ? "is-open" : ""}`} aria-label="Menu" aria-hidden={!open} inert={!open}>

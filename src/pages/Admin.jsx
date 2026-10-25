@@ -6,6 +6,13 @@ import { formatAmount, formatDate, relativeTime } from "../lib/invoices";
 // Owner view of SettleSync's own income. Not linked anywhere; reached at #/owner.
 // The passcode keeps casual visitors out. It is not real security: the treasury's
 // payments are public on Stellar by design, and nothing here can move money.
+// Wallets the SettleSync team used to test the Pro flow during development.
+// Hidden by default so the owner view shows real customers only.
+const TEAM_TEST_WALLETS = new Set([
+  "GCBTWY37Y3STHB24IFZ2RZQWPJ7EA7HAUR56HORBHFJXK2C7IF2OE2FY",
+  "GDR4AYWBQLKZYDBH6KX4ATHDCZPZ2FY7QM5BN4QVBTBIHBKIRBP5ZUEG",
+  "GA7AN6E6WTG2S3KWDUJCNYDKICOULDU5FAXIPOV7QBNWLGERLCICODIN",
+]);
 const PASS_HASH = "4ae5a198d438ea73f9df2066950087cbb14f8517b7f915dbeeebe6ec72ff39e7";
 const SESSION_KEY = "settlesync:owner";
 
@@ -53,6 +60,7 @@ function OwnerDashboard({ onLock }) {
   const [rates, setRates] = useState(null);
   const [names, setNames] = useState({});
   const [err, setErr] = useState("");
+  const [showTest, setShowTest] = useState(false);
 
   const load = () => {
     getAccountPayments(TREASURY).then(setPayments).catch(() => setErr("Couldn't reach Stellar."));
@@ -65,7 +73,9 @@ function OwnerDashboard({ onLock }) {
     return () => clearInterval(t);
   }, []);
 
-  const subs = useMemo(() => (payments || []).filter((p) => p.direction === "in" && (p.memo || "").startsWith("PRO")), [payments]);
+  const allSubs = useMemo(() => (payments || []).filter((p) => p.direction === "in" && (p.memo || "").startsWith("PRO")), [payments]);
+  const testCount = allSubs.filter((p) => TEAM_TEST_WALLETS.has(p.from)).length;
+  const subs = useMemo(() => (showTest ? allSubs : allSubs.filter((p) => !TEAM_TEST_WALLETS.has(p.from))), [allSubs, showTest]);
 
   useEffect(() => {
     const missing = [...new Set(subs.map((p) => p.from))].filter((a) => !(a in names));
@@ -104,7 +114,14 @@ function OwnerDashboard({ onLock }) {
           <h1>Revenue</h1>
           <p className="muted">Read live from the SettleSync treasury on Stellar {NETWORK.name.toLowerCase()}. Refreshes every 15 seconds.</p>
         </div>
-        <button className="btn btn--ghost btn--sm" onClick={onLock}>Lock</button>
+        <div className="owner__tools">
+          {testCount > 0 && (
+            <label className="owner__toggle">
+              <input type="checkbox" checked={showTest} onChange={(e) => setShowTest(e.target.checked)} /> Include {testCount} team test payments
+            </label>
+          )}
+          <button className="btn btn--ghost btn--sm" onClick={onLock}>Lock</button>
+        </div>
       </header>
       {err && <p className="alert alert--error">{err}</p>}
 
@@ -151,7 +168,7 @@ function OwnerDashboard({ onLock }) {
           </ul>
         )}
       </section>
-      <p className="small muted">SettleSync takes no cut of user payments, so revenue here is subscriptions only. Platform-wide invoice volume needs an indexer, which is on the roadmap.</p>
+      <p className="small muted">Revenue comes only from Pro subscriptions: SettleSync takes no cut of user payments. Payments the team made while testing are hidden unless you tick the box above. The treasury balance also includes the free 10,000 test XLM it was created with.</p>
     </section>
   );
 }

@@ -48,7 +48,7 @@ export default function Dashboard() {
         {err && <p className="alert alert--error">{err}</p>}
         <div className="connect__help">
           <p><b>No wallet yet?</b> Albedo works in your browser with nothing to install. Freighter is a browser extension from freighter.app.</p>
-          <p><b>On testnet.</b> Switch your wallet's network to Testnet. Test money is free, and SettleSync can top you up.</p>
+          <p><b>Use Testnet.</b> Set your wallet's network to Testnet before connecting. On Main Net, some wallets show a warning for new websites; SettleSync never asks for real funds.</p>
         </div>
       </section>
     );
@@ -284,10 +284,14 @@ function Workspace() {
         <div className="balances">
           <div><span>XLM</span><b>{account?.exists ? Number(account.xlm).toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</b></div>
           <div><span>USDC</span><b>{account?.hasUsdcTrustline ? Number(account.usdc).toLocaleString("en-US", { maximumFractionDigits: 2 }) : "off"}</b></div>
-          <div className="balances__tools">
-            <button className="linkish small" onClick={doFund} disabled={busy === "fund"}>{busy === "fund" ? "Adding…" : "+ test XLM"}</button>
-            {account?.exists && <button className="linkish small" onClick={doTestUsdc} disabled={busy === "usdc"}>{busy === "usdc" ? "Swapping…" : "+ test USDC"}</button>}
-          </div>
+          <details className="topup">
+            <summary>Testnet top-up</summary>
+            <p>Free test money for trying SettleSync. Not real funds.</p>
+            <div className="topup__row">
+              <button className="btn btn--ghost btn--sm" onClick={doFund} disabled={!!busy}>{busy === "fund" ? "Adding…" : "Add test XLM"}</button>
+              {account?.exists && <button className="btn btn--ghost btn--sm" onClick={doTestUsdc} disabled={!!busy}>{busy === "usdc" ? "Swapping…" : "Add test USDC"}</button>}
+            </div>
+          </details>
         </div>
 
         <nav className="side-nav">

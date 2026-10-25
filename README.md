@@ -25,12 +25,14 @@ Indian Web3 developers, designers and contributors are increasingly paid in USDC
 - **Horizon** payments stream (`/accounts/{id}/payments?join=transactions`) for matching.
 - **Payment requests on-chain**: memo-encoded request transfers, so requests reach the client on any device and invoices can be restored from the chain.
 - **manageData**: the sender's display name is stored on their own account (`ss.name`) so clients see who is requesting.
+- **SEP-7** `web+stellar:pay` links on the pay page, so mobile wallets open the payment with amount and memo pre-filled.
 - **Stellar Wallets Kit** for signing with Freighter, xBull, Albedo, LOBSTR, Hana, Rabet and more. Non-custodial: funds move wallet to wallet, SettleSync never holds them.
 
 ## Features
 
 - Roles: Freelancer, Business/agency (GSTIN on invoices), Client/company, each with its own dashboard layout
 - Invoices, Bills to pay, and full payment History, with search and filters
+- History totals (received, sent, net) for this month, this year, all time or any date range
 - Pay links with QR codes, WhatsApp sharing and overdue reminders
 - Part-payments add up automatically; branded one-page A4 invoice PDF with pay QR code
 - Totals in INR at today's rate; CA export with the INR rate on each payment day
@@ -39,7 +41,8 @@ Indian Web3 developers, designers and contributors are increasingly paid in USDC
 - Pro subscription paid on-chain to the SettleSync treasury; hidden owner dashboard (`#/owner`) reads revenue live from the treasury
 - Local currency for totals and exports (INR default, plus USD, EUR, GBP, AED, SGD, NGN, BRL, PHP)
 - "Get test USDC" swaps test XLM for USDC on Stellar's built-in exchange (path payment)
-- Light and dark mode, interactive ink-dot background, mobile and iOS layouts
+- Light and dark mode, opening animation, interactive ink-dot background, edge glow on overscroll, mobile and iOS layouts
+- Wrong-network warning when the connected wallet is on Main Net
 
 ## Why SettleSync
 

@@ -4,7 +4,7 @@ import { printInvoice } from "../lib/printInvoice";
 import { PrintIcon, WalletIcon, BackIcon } from "../components/Icons";
 import { useApp, go } from "../lib/app";
 import { decodePayLink, matchPayments, statusOf, formatAmount, remainingOf } from "../lib/invoices";
-import { NETWORK, getAccountInfo, getIncomingPayments, shortAddr } from "../lib/stellar";
+import { NETWORK, getAccountInfo, getIncomingPayments, shortAddr, sep7PayUri } from "../lib/stellar";
 import { payInvoice } from "../lib/actions";
 
 export default function PayPage({ token }) {
@@ -113,6 +113,9 @@ export default function PayPage({ token }) {
               <p className="pay__amount">{formatAmount(remaining, invoice.assetCode)}</p>
               {view.received > 0 && <p className="small">Already received {formatAmount(view.received, invoice.assetCode)} of {formatAmount(invoice.amount, invoice.assetCode)}.</p>}
               <p className="small muted">Sent straight to {shortAddr(invoice.to)} on Stellar. Settles in about 5 seconds; the fee is a fraction of a rupee.</p>
+              <a className="sep7-link" href={sep7PayUri({ to: invoice.to, amount: remaining, assetCode: invoice.assetCode, memo: invoice.id, msg: `Invoice ${invoice.id}${invoice.fromName ? ` from ${invoice.fromName}` : ""}` })}>
+                Paying from a phone? Open in your wallet app
+              </a>
 
               {receiverOk === false && (
                 <p className="alert alert--warn">This wallet can't receive {invoice.assetCode} yet. Ask {invoice.fromName || "the sender"} to enable it in SettleSync first.</p>

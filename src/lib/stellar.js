@@ -194,6 +194,7 @@ export async function getAccountPayments(address, limit = 200) {
         from,
         to,
         direction: to === address ? "in" : "out",
+        type: isCreate ? "create" : "payment",
         amount: isCreate ? r.starting_balance : r.amount,
         assetCode: isCreate || r.asset_type === "native" ? "XLM" : r.asset_code,
         memo: r.transaction_attr?.memo_type === "text" ? r.transaction_attr.memo : null,
@@ -354,4 +355,21 @@ export async function buildTestUsdcSwap({ address, xlm = "100", addTrustline = f
     })
   );
   return tb.setTimeout(180).build().toXDR();
+}
+
+// SEP-7 payment URI: opens straight in wallets that support web+stellar links
+// (e.g. LOBSTR, Freighter mobile), with amount and memo filled in.
+export function sep7PayUri({ to, amount, assetCode, memo, msg }) {
+  const q = new URLSearchParams({ destination: to, amount: String(amount) });
+  if (assetCode === "USDC") {
+    q.set("asset_code", "USDC");
+    q.set("asset_issuer", USDC_ISSUER);
+  }
+  if (memo) {
+    q.set("memo", memo);
+    q.set("memo_type", "MEMO_TEXT");
+  }
+  if (msg) q.set("msg", msg.slice(0, 300));
+  q.set("network_passphrase", NETWORK.passphrase);
+  return `web+stellar:pay?${q.toString()}`;
 }

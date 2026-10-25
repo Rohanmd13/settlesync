@@ -1,6 +1,6 @@
 // App-wide state: theme, connected wallet, the user's role/profile, and routing.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { initWallets, setWalletTheme, connectWallet, restoreAddress, disconnectWallet, onWalletChange } from "./wallet";
+import { initWallets, setWalletTheme, connectWallet, restoreAddress, disconnectWallet, onWalletChange, checkNetwork } from "./wallet";
 
 const Ctx = createContext(null);
 export const useApp = () => useContext(Ctx);
@@ -75,6 +75,20 @@ export function AppProvider({ children }) {
 
   useEffect(() => setProfile(loadProfile(address)), [address]);
 
+  // Warn when the connected wallet is on Main Net while SettleSync runs on Testnet.
+  const [wrongNetwork, setWrongNetwork] = useState(false);
+  useEffect(() => {
+    if (!address) return setWrongNetwork(false);
+    const check = () => checkNetwork().then((r) => setWrongNetwork(!r.ok)).catch(() => {});
+    check();
+    window.addEventListener("focus", check);
+    const t = setInterval(check, 15000);
+    return () => {
+      window.removeEventListener("focus", check);
+      clearInterval(t);
+    };
+  }, [address]);
+
   const toggleTheme = useCallback(() => {
     setTheme((t) => {
       const next = t === "dark" ? "light" : "dark";
@@ -108,8 +122,8 @@ export function AppProvider({ children }) {
   );
 
   const value = useMemo(
-    () => ({ route, theme, toggleTheme, address, walletReady, connect, disconnect, profile, updateProfile }),
-    [route, theme, toggleTheme, address, walletReady, connect, disconnect, profile, updateProfile]
+    () => ({ route, theme, toggleTheme, address, walletReady, connect, disconnect, profile, updateProfile, wrongNetwork }),
+    [route, theme, toggleTheme, address, walletReady, connect, disconnect, profile, updateProfile, wrongNetwork]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

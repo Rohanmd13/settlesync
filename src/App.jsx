@@ -7,6 +7,8 @@ import ClaimPage from "./pages/ClaimPage";
 import Plans from "./pages/Plans";
 import Account from "./pages/Account";
 import Admin from "./pages/Admin";
+import Intro from "./components/Intro";
+import EdgeGlow from "./components/EdgeGlow";
 
 const LANDING_ROUTES = ["/", "/why", "/how", "/who", "/stellar", "/faq"];
 
@@ -28,6 +30,8 @@ function Routes() {
       <Header />
       <main id="main" tabIndex={-1} className="page-in" key={pageKey}>{page}</main>
       <Footer />
+      <EdgeGlow />
+      <Intro />
     </>
   );
 }
