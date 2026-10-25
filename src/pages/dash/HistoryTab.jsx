@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useApp } from "../../lib/app";
-import { describePayment, buildHistoryCsv, downloadText } from "../../lib/csv";
+import { describePayment } from "../../lib/csv";
+import { downloadHistoryXlsx } from "../../lib/xlsx";
 import { formatAmount, relativeTime, formatDate } from "../../lib/invoices";
 import { NETWORK, shortAddr } from "../../lib/stellar";
 import { DownloadIcon } from "../../components/Icons";
@@ -38,7 +39,7 @@ export default function HistoryTab({ payments, names }) {
   const exportCsv = async () => {
     setExporting(true);
     try {
-      downloadText(`settlesync-history-${new Date().toISOString().slice(0, 10)}.csv`, await buildHistoryCsv(rows, address, profile.currency || "INR"));
+      await downloadHistoryXlsx(rows, address, profile.currency || "INR");
     } finally {
       setExporting(false);
     }
@@ -53,7 +54,7 @@ export default function HistoryTab({ payments, names }) {
           ))}
         </div>
         <div className="toolbar__end">
-          <button className="btn btn--ghost" onClick={exportCsv} disabled={!rows.length || exporting}><DownloadIcon /> {exporting ? "Preparing…" : "Export CSV"}</button>
+          <button className="btn btn--ghost" onClick={exportCsv} disabled={!rows.length || exporting}><DownloadIcon /> {exporting ? "Preparing…" : "Download Excel"}</button>
         </div>
       </div>
 

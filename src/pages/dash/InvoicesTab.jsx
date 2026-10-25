@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../../lib/app";
 import InvoiceSheet from "../../components/InvoiceSheet";
-import { QrImage, useCopy, whatsappLink, printInvoice } from "../../components/bits";
+import { QrImage, useCopy, whatsappLink } from "../../components/bits";
+import { printInvoice } from "../../lib/printInvoice";
 import { CopyIcon, QrIcon, PrintIcon, SendIcon, ChatIcon, PlusIcon, SearchIcon, DownloadIcon } from "../../components/Icons";
 import {
   newInvoiceId,
@@ -14,7 +15,7 @@ import {
 } from "../../lib/invoices";
 import { NETWORK, shortAddr, isValidAddress, requestMemoFits } from "../../lib/stellar";
 import { sendPaymentRequest } from "../../lib/actions";
-import { buildLedgerCsv, downloadText } from "../../lib/csv";
+import { downloadLedgerXlsx } from "../../lib/xlsx";
 import { formatFiat } from "../../lib/inr";
 
 const FILTERS = { all: "All", open: "Open", overdue: "Overdue", paid: "Paid" };
@@ -99,7 +100,9 @@ export default function InvoicesTab({ invoices, persist, rawInvoices, account, j
   const exportCsv = async () => {
     setExporting(true);
     try {
-      downloadText(`settlesync-ledger-${new Date().toISOString().slice(0, 10)}.csv`, await buildLedgerCsv(invoices, address, profile));
+      await downloadLedgerXlsx(invoices, address, profile);
+    } catch (e) {
+      setNotice({ kind: "error", text: `Couldn't build the Excel file: ${e.message}` });
     } finally {
       setExporting(false);
     }
@@ -119,7 +122,7 @@ export default function InvoicesTab({ invoices, persist, rawInvoices, account, j
         </div>
         <div className="toolbar__end">
           <button className="btn btn--ghost" onClick={exportCsv} disabled={!invoices.length || exporting} title="CA export is a Pro feature, free during the pilot">
-            <DownloadIcon /> {exporting ? "Preparing…" : "Export for my CA"} <span className="pro-tag">Pro</span>
+            <DownloadIcon /> {exporting ? "Preparing…" : "Excel for my CA"} <span className="pro-tag">Pro</span>
           </button>
           <button className="btn btn--primary" onClick={() => { setShowForm(true); setSelectedId(null); }}><PlusIcon /> New invoice</button>
         </div>
@@ -345,7 +348,7 @@ function InvoiceDetail({ inv, stampKey, onDelete, onDuplicate, onRequestSent, se
       )}
 
       <div className="detail__more">
-        <button className="btn btn--ghost btn--sm" onClick={printInvoice}><PrintIcon /> Download PDF</button>
+        <button className="btn btn--ghost btn--sm" onClick={() => printInvoice(inv)}><PrintIcon /> Download PDF</button>
         <button className="btn btn--ghost btn--sm" onClick={onDuplicate}>Bill again</button>
         <button className="linkish danger small" onClick={onDelete}>Delete invoice</button>
       </div>

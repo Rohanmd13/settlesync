@@ -90,14 +90,3 @@ export function useCopy() {
 export function whatsappLink(text) {
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
-
-export function printInvoice() {
-  document.body.dataset.print = "invoice";
-  const done = () => {
-    delete document.body.dataset.print;
-    window.removeEventListener("afterprint", done);
-  };
-  window.addEventListener("afterprint", done);
-  window.print();
-  setTimeout(done, 1500);
-}

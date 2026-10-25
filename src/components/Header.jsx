@@ -80,6 +80,7 @@ export default function Header() {
 
         <nav className="nav" aria-label="Main">
           <NavLink to="/">Home</NavLink>
+          <NavLink to="/why">Why us</NavLink>
           <NavLink to="/how">How it works</NavLink>
           <NavLink to="/plans">Plans</NavLink>
           <NavLink to="/faq">Questions</NavLink>
@@ -172,6 +173,7 @@ export default function Header() {
           <a href="#/account">Profile, currency and backup</a>
           <p className="drawer__group">About SettleSync</p>
           <a href="#/">Home</a>
+          <a href="#/why">Why SettleSync</a>
           <a href="#/how">How it works</a>
           <a href="#/stellar">Under the hood</a>
           <a href="#/plans">Plans</a>
@@ -212,7 +214,7 @@ export function Footer() {
           <a href="https://stellar.org" target="_blank" rel="noreferrer">Built on Stellar</a>
         </nav>
       </div>
-      <p className="footer__legal">Testnet pilot: no real funds move. Currency figures are for record keeping, not tax advice.</p>
+      <p className="footer__legal">Testnet pilot: no real funds move. Currency figures are for record keeping, not tax advice. <a href="#/owner" className="footer__owner">Team</a></p>
     </footer>
   );
 }

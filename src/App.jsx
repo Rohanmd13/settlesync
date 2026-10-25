@@ -8,7 +8,7 @@ import Plans from "./pages/Plans";
 import Account from "./pages/Account";
 import Admin from "./pages/Admin";
 
-const LANDING_ROUTES = ["/", "/how", "/who", "/stellar", "/faq"];
+const LANDING_ROUTES = ["/", "/why", "/how", "/who", "/stellar", "/faq"];
 
 function Routes() {
   const { route } = useApp();

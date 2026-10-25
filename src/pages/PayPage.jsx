@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import InvoiceSheet from "../components/InvoiceSheet";
-import { printInvoice } from "../components/bits";
+import { printInvoice } from "../lib/printInvoice";
 import { PrintIcon, WalletIcon, BackIcon } from "../components/Icons";
 import { useApp, go } from "../lib/app";
 import { decodePayLink, matchPayments, statusOf, formatAmount, remainingOf } from "../lib/invoices";
@@ -90,7 +90,7 @@ export default function PayPage({ token }) {
       <div className="pay__grid">
         <div className="pay__doc">
           <InvoiceSheet inv={view} status={status} stampKey={stampKey} printable />
-          <button className="btn btn--ghost btn--sm pay__print" onClick={printInvoice}><PrintIcon /> Download PDF</button>
+          <button className="btn btn--ghost btn--sm pay__print" onClick={() => printInvoice(view)}><PrintIcon /> Download PDF</button>
         </div>
 
         <div className="pay__side">

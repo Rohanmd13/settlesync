@@ -4,7 +4,7 @@ import InkField from "../components/InkField";
 import { Reveal, LivePill } from "../components/bits";
 import { useApp, go, ROLES } from "../lib/app";
 
-const SECTION_FOR_ROUTE = { "/how": "how", "/who": "who", "/stellar": "stellar", "/faq": "faq" };
+const SECTION_FOR_ROUTE = { "/why": "why", "/how": "how", "/who": "who", "/stellar": "stellar", "/faq": "faq" };
 
 export default function Landing() {
   const { route, address } = useApp();
@@ -98,6 +98,38 @@ export default function Landing() {
         </p>
       </section>
 
+      <section className="section" id="why">
+        <h2>Why SettleSync</h2>
+        <p className="section__lede">Most ways of getting paid in USDC stop at "the money arrived". SettleSync is built around the part that comes after: knowing what it was for, and proving it.</p>
+        <div className="usp">
+          {USPS.map((u, i) => (
+            <Reveal key={u.title} delay={i * 60} className="usp__card">
+              <span className="usp__icon" aria-hidden="true">{u.icon}</span>
+              <h3>{u.title}</h3>
+              <p>{u.body}</p>
+            </Reveal>
+          ))}
+        </div>
+        <div className="compare-wrap">
+          <table className="compare">
+            <caption>How it compares</caption>
+            <thead>
+              <tr><th scope="col"></th><th scope="col" className="compare__us">SettleSync</th><th scope="col">Plain wallet transfer</th><th scope="col">Bank wire / PayPal</th><th scope="col">Freelance marketplace</th></tr>
+            </thead>
+            <tbody>
+              {COMPARE.map(([label, ...cells]) => (
+                <tr key={label}>
+                  <th scope="row">{label}</th>
+                  {cells.map((c, i) => (
+                    <td key={i} className={i === 0 ? "compare__us" : ""}><span className={`mark mark--${c[0]}`} aria-hidden="true">{c[0] === "y" ? "✓" : c[0] === "n" ? "✕" : "~"}</span> {c.slice(2)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section className="section" id="who">
         <h2>Who it's for</h2>
         <p className="section__lede">Pick what fits you. Your dashboard arranges itself around it, and you can switch any time.</p>
@@ -170,6 +202,25 @@ const WALLET_STEPS = [
   { title: "Send the request", body: "One signature in your wallet sends the request to their wallet on Stellar. No link to forward." },
   { title: "It lands in Bills to pay", body: "When your client opens SettleSync, your request is waiting with your name, amount and invoice number." },
   { title: "Paid, matched, done", body: "They tap Pay. You see the invoice stamp itself paid on your side within seconds." },
+];
+
+const USPS = [
+  { icon: "≡", title: "Invoices that match themselves", body: "The invoice number rides inside the Stellar payment, so every payment lands on exactly the right invoice, including part-payments. No guessing, no spreadsheet." },
+  { icon: "⇄", title: "Three ways to get paid", body: "A pay link for new clients, a request straight to a regular client's wallet, or a claim code when the client wants to pay before you've even billed." },
+  { icon: "₹", title: "Ready for your CA", body: "One Excel file with every payment, its rupee value on the day it arrived, and a link to the transaction as proof. Or pick USD, EUR, AED and more." },
+  { icon: "◎", title: "We never hold your money", body: "Money goes wallet to wallet on Stellar. No account freezes, no payout delays, no percentage taken from what you earn." },
+  { icon: "⚡", title: "Seconds, for a fraction of a rupee", body: "A Stellar payment settles in about 5 seconds and costs less than ₹0.01, so a 50 USDC invoice isn't eaten by fees." },
+  { icon: "✦", title: "Any wallet, no account", body: "Freighter, xBull, Albedo, LOBSTR and more. Your client doesn't need to sign up for anything to pay you." },
+];
+
+// [label, SettleSync, wallet, bank/PayPal, marketplace]  first char: y / n / p(partial)
+const COMPARE = [
+  ["Knows which invoice a payment was for", "y Automatic, by memo", "n You match it by hand", "p Reference often missing", "y Inside the platform only"],
+  ["Time to settle", "y ~5 seconds", "y Seconds", "n 1–5 days", "n Days, after release"],
+  ["Cost to get paid", "y < ₹0.01 network fee", "y Network fee", "n 3–5% plus FX spread", "n 10–20% commission"],
+  ["Client can pay before an invoice", "y Claim codes", "p Only if they have your address", "p Yes", "n No"],
+  ["Accountant export with local currency", "y One click", "n No", "p Statements, no invoice link", "p Platform reports"],
+  ["Who holds the money", "y You, always", "y You", "n The bank or PayPal", "n The platform, until release"],
 ];
 
 const CODE_STEPS = [

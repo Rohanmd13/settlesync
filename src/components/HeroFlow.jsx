@@ -1,88 +1,69 @@
 import { useEffect, useState } from "react";
 
-// Animated explainer: a payment leaves a client's wallet carrying its invoice
-// number, travels down the rail, and the matching ledger line marks itself paid.
-const ROWS = [
-  { client: "Lumen Labs DAO", place: "DAO, remote", amount: "1,200", id: "SS-K7QM4X" },
-  { client: "Build Grant 2026", place: "Grant program", amount: "450", id: "SS-9PRT2C" },
-  { client: "Kite Studio", place: "Agency, Berlin", amount: "320", id: "SS-H4WQ8N" },
+// A plain-language explainer, one step at a time:
+// 1 invoice sent → 2 client pays → 3 invoice marks itself paid.
+const INVOICE = { client: "Kite Studio", amount: "320", id: "SS-H4WQ8N", work: "Website design" };
+const STEPS = [
+  { title: "You send an invoice", body: "320 USDC to Kite Studio, numbered SS-H4WQ8N." },
+  { title: "Your client pays", body: "The invoice number travels with the payment." },
+  { title: "It marks itself paid", body: "No checking your wallet, no spreadsheet." },
 ];
-
-const STEP_MS = 3000;
+const STEP_MS = 2600;
 
 export default function HeroFlow() {
   const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  const [active, setActive] = useState(reduced ? -1 : 0);
-  const [paid, setPaid] = useState(reduced ? ROWS.length : 0);
+  const [step, setStep] = useState(reduced ? 2 : 0);
   const [cycle, setCycle] = useState(0);
 
   useEffect(() => {
     if (reduced) return;
-    const arrive = setTimeout(() => setPaid((p) => Math.max(p, active + 1)), 1500);
-    const next = setTimeout(() => {
-      if (active + 1 < ROWS.length) setActive(active + 1);
+    const t = setTimeout(() => {
+      if (step < 2) setStep(step + 1);
       else {
-        setActive(-1);
-        setTimeout(() => {
-          setPaid(0);
-          setCycle((c) => c + 1);
-          setActive(0);
-        }, 1600);
+        setStep(0);
+        setCycle((c) => c + 1);
       }
-    }, STEP_MS);
-    return () => {
-      clearTimeout(arrive);
-      clearTimeout(next);
-    };
-  }, [active, reduced]);
+    }, step === 2 ? STEP_MS + 1400 : STEP_MS);
+    return () => clearTimeout(t);
+  }, [step, reduced]);
 
-  const row = ROWS[active];
+  const paid = step === 2;
 
   return (
-    <div className="flow" aria-label="Animation: a USDC payment carrying invoice number SS-K7QM4X arrives and the matching invoice marks itself paid">
-      <div className="flow__clients" aria-hidden="true">
-        {ROWS.map((r, i) => (
-          <div key={r.id} className={`flow__client ${i === active ? "is-active" : ""}`}>
-            <span className="flow__avatar">{r.client[0]}</span>
-            <span>
-              <b>{r.client}</b>
-              <small>{r.place}</small>
-            </span>
-          </div>
+    <div className="flow2" aria-label="How SettleSync works: you send an invoice, your client pays, and the invoice marks itself paid">
+      <ol className="flow2__steps">
+        {STEPS.map((s, i) => (
+          <li key={s.title} className={i === step ? "is-on" : i < step ? "is-done" : ""}>
+            <button type="button" onClick={() => setStep(i)} aria-current={i === step}>
+              <span className="flow2__num">{i < step ? "✓" : i + 1}</span>
+              <span className="flow2__txt"><b>{s.title}</b><small>{s.body}</small></span>
+            </button>
+          </li>
         ))}
-      </div>
+      </ol>
 
-      <div className="flow__rail" aria-hidden="true">
-        {row && (
-          <div key={`${cycle}-${active}`} className="flow__slip">
-            <b>+{row.amount} USDC</b>
-            <span>memo {row.id}</span>
+      <div className="flow2__stage">
+        <div className={`flow2__invoice ${paid ? "is-paid" : ""}`}>
+          <div className="flow2__spine" aria-hidden="true" />
+          <div className="flow2__body">
+            <div className="flow2__head">
+              <span>Invoice <b>{INVOICE.id}</b></span>
+              <span className={`flow2__status ${paid ? "is-paid" : ""}`}>{paid ? "Paid" : step === 1 ? "Payment arriving…" : "Waiting for payment"}</span>
+            </div>
+            <p className="flow2__client">{INVOICE.client}</p>
+            <p className="flow2__work">{INVOICE.work}</p>
+            <p className="flow2__amt">{INVOICE.amount} <span>USDC</span></p>
+          </div>
+          {paid && <div key={`s-${cycle}`} className="flow2__stamp" aria-hidden="true">PAID</div>}
+        </div>
+
+        {step === 1 && (
+          <div key={`c-${cycle}`} className="flow2__coin" aria-hidden="true">
+            <b>+320 USDC</b>
+            <small>from Kite Studio · invoice {INVOICE.id}</small>
           </div>
         )}
-      </div>
-
-      <div className="flow__ledger">
-        <div className="flow__ledger-head">
-          <span>Your ledger</span>
-          <span className="flow__watch"><i aria-hidden="true" /> watching Stellar</span>
-        </div>
-        <ul>
-          {ROWS.map((r, i) => {
-            const isPaid = i < paid;
-            return (
-              <li key={r.id} className={isPaid ? "is-paid" : ""}>
-                <span className="flow__row-client">
-                  <b>{r.client}</b>
-                  <small>{r.id}</small>
-                </span>
-                <span className="flow__row-amt">{r.amount} USDC</span>
-                <span className="flow__row-status">
-                  {isPaid ? <span key={`p-${cycle}`} className="mini-stamp">Paid</span> : "Awaiting"}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        <p className="flow2__caption">{STEPS[step].body}</p>
       </div>
     </div>
   );
