@@ -182,7 +182,7 @@ export default function Landing() {
       <section className="closing">
         <div className="closing__inner">
           <h2>Send your next invoice with SettleSync</h2>
-          <p>Free during the testnet pilot. Takes about a minute.</p>
+          <p>Free to start, on Main Net or Testnet. Takes about a minute.</p>
           <button className="btn btn--light btn--lg" onClick={() => go("/dashboard")}>{address ? "Go to dashboard" : "Get started free"}</button>
         </div>
       </section>
@@ -236,7 +236,7 @@ const FAQ = [
   { q: "Does SettleSync ever hold my money?", a: "No. Payments go directly from your client's wallet to yours on Stellar. SettleSync only reads the public network to see which invoice a payment was for." },
   { q: "Does my client need a SettleSync account?", a: "No. With a pay link, they just open it and pay with any Stellar wallet. If they also use SettleSync, your requests can reach them directly, with no link at all." },
   { q: "Which wallets work?", a: "Freighter, xBull, Albedo, LOBSTR, Hana, Rabet and other wallets supported by Stellar Wallets Kit. Albedo works right in the browser with nothing to install." },
-  { q: "Is this real money?", a: "Not yet. The pilot runs on Stellar testnet, where XLM and USDC are free test tokens. Mainnet comes after the pilot." },
+  { q: "Is this real money?", a: "It can be either. SettleSync follows your wallet: on Stellar Main Net it moves real USDC and XLM; on Testnet it uses free test money, which is the best way to try it. You can see which one you're on next to your name at the top." },
   { q: "What does the accountant export contain?", a: "One row per payment: invoice number, client, date, amount, the rate in your currency on that day from CoinGecko, the converted value, and a link to the transaction as proof. It's a record for your CA or accountant, not tax advice." },
   { q: "Where are my invoices stored?", a: "In your browser, tied to your wallet. Invoices you send as wallet requests are also recorded on Stellar and come back automatically on a new device. You can download a backup any time from your profile." },
   { q: "What if a client pays only part of the invoice?", a: "SettleSync adds up every payment with that invoice number. The invoice shows 'Part paid' with the amount received until the rest arrives." },

@@ -1,8 +1,9 @@
 // Invoices live in this browser (localStorage), keyed by the wallet that issues them.
 // Invoices sent as on-chain payment requests can also be restored from Stellar itself.
-import { parseRequestMemo, shortAddr } from "./stellar";
+import { parseRequestMemo, shortAddr, NETWORK } from "./stellar";
 
-const KEY = (addr) => `settlesync:invoices:${addr}`;
+// Testnet keeps the original key so existing pilot data stays; Main Net is separate.
+const KEY = (addr) => (NETWORK.id === "mainnet" ? `settlesync:invoices:mainnet:${addr}` : `settlesync:invoices:${addr}`);
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I confusion
 
 export const FREE_INVOICES_PER_MONTH = 5;
@@ -68,7 +69,7 @@ export function mergeRequestedFromChain(list, payments, owner) {
 }
 
 // ---------- pay links ----------
-const PUBLIC_FIELDS = ["id", "to", "fromName", "gstin", "client", "description", "amount", "assetCode", "dueDate", "createdAt"];
+const PUBLIC_FIELDS = ["id", "to", "fromName", "gstin", "client", "description", "amount", "assetCode", "dueDate", "createdAt", "net"];
 
 function toBase64Url(str) {
   const bytes = new TextEncoder().encode(str);
@@ -86,6 +87,7 @@ function fromBase64Url(s) {
 
 export function payLinkFor(inv) {
   const data = Object.fromEntries(PUBLIC_FIELDS.filter((k) => inv[k]).map((k) => [k, inv[k]]));
+  data.net = inv.net || NETWORK.id;
   const base = `${window.location.origin}${window.location.pathname}`;
   return `${base}#/pay/${toBase64Url(JSON.stringify(data))}`;
 }

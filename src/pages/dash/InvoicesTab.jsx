@@ -188,8 +188,8 @@ export default function InvoicesTab({ invoices, persist, rawInvoices, account, j
 }
 
 function InvoiceForm({ onCancel, onCreate, usdcReady }) {
-  const in14 = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10);
-  const [f, setF] = useState({ client: "", clientAddress: "", description: "", amount: "", assetCode: "USDC", dueDate: in14 });
+  const today = new Date().toISOString().slice(0, 10);
+  const [f, setF] = useState({ client: "", clientAddress: "", description: "", amount: "", assetCode: "USDC", dueDate: today });
   const [how, setHow] = useState("link");
   const [err, setErr] = useState("");
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -232,7 +232,7 @@ function InvoiceForm({ onCancel, onCreate, usdcReady }) {
         </label>
       </div>
       <label className="field">Due date
-        <input type="date" value={f.dueDate} onChange={set("dueDate")} />
+        <input type="date" value={f.dueDate} min={today} onChange={set("dueDate")} />
       </label>
 
       <fieldset className="how">

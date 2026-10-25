@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useApp, go, ROLES } from "../lib/app";
-import { getAccountInfo, getAccountPayments, fundWithFriendbot, getPublicName, shortAddr } from "../lib/stellar";
+import { getAccountInfo, getAccountPayments, fundWithFriendbot, getPublicName, shortAddr, NETWORK } from "../lib/stellar";
 import {
   loadInvoices,
   saveInvoices,
@@ -24,7 +24,7 @@ import RedeemTab from "./dash/RedeemTab";
 const POLL_MS = 8000;
 
 export default function Dashboard() {
-  const { address, walletReady, connect, profile } = useApp();
+  const { address, walletReady, connect, profile, network } = useApp();
   const [err, setErr] = useState("");
 
   if (!walletReady) return <section className="page page--narrow"><p className="muted">Loading your wallet…</p></section>;
@@ -48,18 +48,19 @@ export default function Dashboard() {
         {err && <p className="alert alert--error">{err}</p>}
         <div className="connect__help">
           <p><b>No wallet yet?</b> Albedo works in your browser with nothing to install. Freighter is a browser extension from freighter.app.</p>
-          <p><b>Use Testnet.</b> Set your wallet's network to Testnet before connecting. On Main Net, some wallets show a warning for new websites; SettleSync never asks for real funds.</p>
+          <p><b>Main Net or Testnet.</b> SettleSync uses whichever network your wallet is on: Main Net for real payments, Testnet to try it with free test money.</p>
         </div>
       </section>
     );
   }
 
   if (!profile.role) return <Onboarding />;
-  return <Workspace key={address} />;
+  return <Workspace key={`${address}:${network}`} />;
 }
 
 function Onboarding() {
-  const { updateProfile } = useApp();
+  const { updateProfile, walletNetwork, network, switchNetwork } = useApp();
+  const [net, setNet] = useState(walletNetwork || network);
   const pending = (() => {
     try { return sessionStorage.getItem("settlesync:pending-role"); } catch { return null; }
   })();
@@ -70,7 +71,8 @@ function Onboarding() {
   const save = (e) => {
     e.preventDefault();
     try { sessionStorage.removeItem("settlesync:pending-role"); } catch { /* ignore */ }
-    updateProfile({ role, name: name.trim(), gstin: role === "business" ? gstin.trim().toUpperCase() : "" });
+    updateProfile({ role, name: name.trim(), gstin: role === "business" ? gstin.trim().toUpperCase() : "", network: net });
+    if (net !== network) switchNetwork(net);
     go(role === "client" ? "/dashboard/bills" : "/dashboard/invoices");
   };
 
@@ -99,6 +101,21 @@ function Onboarding() {
             <input value={gstin} onChange={(e) => setGstin(e.target.value)} placeholder="29ABCDE1234F1Z5" maxLength={20} />
           </label>
         )}
+        <fieldset className="net-pick">
+          <legend>What is this wallet for?</legend>
+          <label className={`net-pick__opt ${net === "mainnet" ? "is-on" : ""}`}>
+            <input type="radio" name="net" checked={net === "mainnet"} onChange={() => setNet("mainnet")} />
+            <b>Real payments</b><span>Stellar Main Net, real USDC and XLM</span>
+          </label>
+          <label className={`net-pick__opt ${net === "testnet" ? "is-on" : ""}`}>
+            <input type="radio" name="net" checked={net === "testnet"} onChange={() => setNet("testnet")} />
+            <b>Trying it out</b><span>Stellar Testnet, free test money</span>
+          </label>
+          {walletNetwork && walletNetwork !== net && (
+            <p className="alert alert--warn">Your wallet is set to {walletNetwork === "mainnet" ? "Main Net" : "Testnet"}. Switch your wallet's network to match, or SettleSync will follow the wallet.</p>
+          )}
+          {walletNetwork && walletNetwork === net && <small>Your wallet is on {net === "mainnet" ? "Main Net" : "Testnet"} too, so you're all set.</small>}
+        </fieldset>
         <button className="btn btn--primary btn--lg" type="submit">Open my dashboard</button>
       </form>
     </section>
@@ -284,14 +301,14 @@ function Workspace() {
         <div className="balances">
           <div><span>XLM</span><b>{account?.exists ? Number(account.xlm).toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</b></div>
           <div><span>USDC</span><b>{account?.hasUsdcTrustline ? Number(account.usdc).toLocaleString("en-US", { maximumFractionDigits: 2 }) : "off"}</b></div>
-          <details className="topup">
+          {NETWORK.id === "testnet" && <details className="topup">
             <summary>Testnet top-up</summary>
             <p>Free test money for trying SettleSync. Not real funds.</p>
             <div className="topup__row">
               <button className="btn btn--ghost btn--sm" onClick={doFund} disabled={!!busy}>{busy === "fund" ? "Adding…" : "Add test XLM"}</button>
               {account?.exists && <button className="btn btn--ghost btn--sm" onClick={doTestUsdc} disabled={!!busy}>{busy === "usdc" ? "Swapping…" : "Add test USDC"}</button>}
             </div>
-          </details>
+          </details>}
         </div>
 
         <nav className="side-nav">
@@ -348,16 +365,22 @@ function Workspace() {
             <h2>Finish setting up this wallet</h2>
             {needsFunding && (
               <div className="setup__step">
-                <p>This wallet isn't active on testnet yet. Add free test XLM to activate it.</p>
-                <button className="btn btn--primary" onClick={doFund} disabled={busy === "fund"}>{busy === "fund" ? "Adding…" : "Get test XLM"}</button>
+                {NETWORK.id === "testnet" ? (
+                  <>
+                    <p>This wallet isn't active on Testnet yet. Add free test XLM to activate it.</p>
+                    <button className="btn btn--primary" onClick={doFund} disabled={busy === "fund"}>{busy === "fund" ? "Adding…" : "Get test XLM"}</button>
+                  </>
+                ) : (
+                  <p>This wallet isn't active on Stellar Main Net yet. Send it at least 2 XLM from an exchange or another wallet to activate it.</p>
+                )}
               </div>
             )}
             {needsUsdc && (
               <div className="setup__step">
-                <p>Turn on USDC: a one-time approval in your wallet. Or get test USDC, which turns it on and adds some to try with.</p>
+                <p>{NETWORK.id === "testnet" ? "Turn on USDC: a one-time approval in your wallet. Or get test USDC, which turns it on and adds some to try with." : "Turn on USDC: a one-time approval in your wallet so it can receive and hold USDC."}</p>
                 <div className="actions">
                   <button className="btn btn--ghost" onClick={doEnableUsdc} disabled={!!busy}>{busy === "trust" ? "Waiting for wallet…" : "Enable USDC"}</button>
-                  <button className="btn btn--primary" onClick={doTestUsdc} disabled={!!busy}>{busy === "usdc" ? "Waiting for wallet…" : "Get test USDC"}</button>
+                  {NETWORK.id === "testnet" && <button className="btn btn--primary" onClick={doTestUsdc} disabled={!!busy}>{busy === "usdc" ? "Waiting for wallet…" : "Get test USDC"}</button>}
                 </div>
               </div>
             )}
@@ -367,7 +390,7 @@ function Workspace() {
         {showUpsell && (
           <div className="upsell" role="note">
             <p>
-              You've created {monthCount} invoices this month. Free covers {FREE_INVOICES_PER_MONTH}; during the testnet pilot, Pro is unlocked for everyone, so nothing changes for you. <a href="#/plans">See plans</a>
+              You've created {monthCount} invoices this month. Free covers {FREE_INVOICES_PER_MONTH}; during the pilot, Pro is unlocked for everyone, so nothing changes for you. <a href="#/plans">See plans</a>
             </p>
             <button className="alert__x" aria-label="Dismiss" onClick={() => { setHideUpsell(true); try { sessionStorage.setItem("settlesync:hide-upsell", "1"); } catch { /* ignore */ } }}>×</button>
           </div>

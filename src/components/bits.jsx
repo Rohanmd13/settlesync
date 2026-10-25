@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { getLatestLedger } from "../lib/stellar";
+import { getLatestLedger, NETWORK } from "../lib/stellar";
+import { useApp } from "../lib/app";
 
 // Reveals children once when they scroll into view.
 export function Reveal({ as: Tag = "div", className = "", children, delay = 0, ...rest }) {
@@ -29,7 +30,7 @@ export function Reveal({ as: Tag = "div", className = "", children, delay = 0, .
   );
 }
 
-// Latest closed ledger on Stellar testnet, refreshed every 6s.
+// Latest closed ledger on the active Stellar network, refreshed every 6s.
 export function useLatestLedger() {
   const [ledger, setLedger] = useState(null);
   useEffect(() => {
@@ -49,11 +50,12 @@ export function useLatestLedger() {
 }
 
 export function LivePill() {
+  useApp(); // re-render when the network changes
   const ledger = useLatestLedger();
   return (
-    <span className="live-pill" title="Live data from Stellar testnet">
+    <span className="live-pill" title={`Live data from Stellar ${NETWORK.label}`}>
       <span className={`live-pill__dot ${ledger ? "is-on" : ""}`} aria-hidden="true" />
-      {ledger ? <>Testnet ledger <b>#{Number(ledger.sequence).toLocaleString("en-US")}</b></> : "Connecting to Stellar…"}
+      {ledger ? <>{NETWORK.label} ledger <b>#{Number(ledger.sequence).toLocaleString("en-US")}</b></> : "Connecting to Stellar…"}
     </span>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { getAccountInfo, getAccountPayments, getPublicName, TREASURY, NETWORK, shortAddr } from "../lib/stellar";
+import { useApp } from "../lib/app";
 import { liveRates, formatFiat } from "../lib/inr";
 import { formatAmount, formatDate, relativeTime } from "../lib/invoices";
 
@@ -55,6 +56,40 @@ export default function Admin() {
 }
 
 function OwnerDashboard({ onLock }) {
+  const { network, switchNetwork } = useApp();
+  if (!TREASURY) {
+    return (
+      <section className="page owner">
+        <header className="owner__head">
+          <div>
+            <p className="owner__kicker">SettleSync owner dashboard</p>
+            <h1>Revenue</h1>
+          </div>
+          <div className="owner__tools">
+            <OwnerNet network={network} switchNetwork={switchNetwork} />
+            <button className="btn btn--ghost btn--sm" onClick={onLock}>Lock</button>
+          </div>
+        </header>
+        <div className="card">
+          <p className="card__title">No Main Net treasury yet</p>
+          <p className="muted">Pro isn't sold on Main Net yet, so there's no revenue to show here. When you create SettleSync's Main Net wallet, its address goes in one line of code and this page starts reading real revenue.</p>
+        </div>
+      </section>
+    );
+  }
+  return <OwnerRevenue onLock={onLock} network={network} switchNetwork={switchNetwork} />;
+}
+
+function OwnerNet({ network, switchNetwork }) {
+  return (
+    <div className="seg seg--sm" aria-label="Network">
+      <button className={network === "mainnet" ? "is-on" : ""} onClick={() => switchNetwork("mainnet")}>Main Net</button>
+      <button className={network === "testnet" ? "is-on" : ""} onClick={() => switchNetwork("testnet")}>Testnet</button>
+    </div>
+  );
+}
+
+function OwnerRevenue({ onLock, network, switchNetwork }) {
   const [payments, setPayments] = useState(null);
   const [treasury, setTreasury] = useState(null);
   const [rates, setRates] = useState(null);
@@ -115,6 +150,7 @@ function OwnerDashboard({ onLock }) {
           <p className="muted">Read live from the SettleSync treasury on Stellar {NETWORK.name.toLowerCase()}. Refreshes every 15 seconds.</p>
         </div>
         <div className="owner__tools">
+          <OwnerNet network={network} switchNetwork={switchNetwork} />
           {testCount > 0 && (
             <label className="owner__toggle">
               <input type="checkbox" checked={showTest} onChange={(e) => setShowTest(e.target.checked)} /> Include {testCount} team test payments

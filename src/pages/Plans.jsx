@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { go, useApp } from "../lib/app";
-import { getAccountInfo, getAccountPayments, proStatus, PRO_PRICE } from "../lib/stellar";
+import { getAccountInfo, getAccountPayments, proStatus, PRO_PRICE, TREASURY } from "../lib/stellar";
 import { payPro } from "../lib/actions";
 import { formatDate } from "../lib/invoices";
 
@@ -45,7 +45,7 @@ export default function Plans() {
   return (
     <section className="page plans-page">
       <h1>Plans</h1>
-      <p className="lede">Start free. Upgrade only if SettleSync becomes part of how you run your work. During the testnet pilot every Pro feature is unlocked for everyone, and Pro payments use test money.</p>
+      <p className="lede">Start free. Upgrade only if SettleSync becomes part of how you run your work. During the pilot every Pro feature is unlocked for everyone. On Testnet you can try upgrading with free test money.</p>
 
       <div className="plans">
         <div className="plan">
@@ -67,7 +67,9 @@ export default function Plans() {
             <li>Your logo on invoices and pay pages</li>
             <li>Automatic reminders for overdue invoices</li>
           </ul>
-          {pro?.active ? (
+          {!TREASURY ? (
+            <p className="plan__pilot">Free for everyone during the pilot</p>
+          ) : pro?.active ? (
             <p className="plan__pilot">Pro active until {formatDate(pro.until)}</p>
           ) : (
             <div className="plan__buy">

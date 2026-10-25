@@ -113,7 +113,7 @@ function BillDetail({ bill, name, account, setNotice, onPaid }) {
           <p className="card__title">Pay {name || shortAddr(bill.to)}</p>
           <p className="pay__amount">{formatAmount(remaining, bill.assetCode)}</p>
           <p className="small muted">From {shortAddr(bill.to)}{name ? "" : " (no name published)"}. Settles in about 5 seconds.</p>
-          {lacksTrust && <p className="alert alert--warn">Your wallet can't hold USDC yet. Use "Enable USDC" above, then get testnet USDC from faucet.circle.com.</p>}
+          {lacksTrust && <p className="alert alert--warn">Your wallet can't hold USDC yet. Use "Enable USDC" above, then add USDC to it.</p>}
           {!lacksTrust && tooLow && <p className="alert alert--warn">Your balance ({formatAmount(balance, bill.assetCode)}) is lower than this bill.</p>}
           <button className="btn btn--primary btn--wide btn--lg" onClick={pay} disabled={busy || lacksTrust || !account?.exists}>
             {busy ? "Approve in your wallet…" : `Pay ${formatAmount(remaining, bill.assetCode)}`}

@@ -8,8 +8,15 @@ import { NETWORK, getAccountInfo, getIncomingPayments, shortAddr, sep7PayUri } f
 import { payInvoice } from "../lib/actions";
 
 export default function PayPage({ token }) {
-  const { address: payer, connect } = useApp();
+  const { address: payer, connect, network, walletNetwork, switchNetwork } = useApp();
   const invoice = decodePayLink(token);
+  const linkNet = invoice?.net === "mainnet" ? "mainnet" : "testnet";
+  useEffect(() => {
+    if (invoice && linkNet !== network) switchNetwork(linkNet);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkNet]);
+  const netLabel = linkNet === "mainnet" ? "Main Net" : "Testnet";
+  const walletMismatch = payer && walletNetwork && walletNetwork !== linkNet;
   const [state, setState] = useState(null);
   const [payerInfo, setPayerInfo] = useState(null);
   const [receiverOk, setReceiverOk] = useState(null);
@@ -117,6 +124,10 @@ export default function PayPage({ token }) {
                 Paying from a phone? Open in your wallet app
               </a>
 
+              <p className="pay__net"><span className={`net-chip ${linkNet === "mainnet" ? "net-chip--main" : ""}`}><i aria-hidden="true" />{netLabel}</span> {linkNet === "mainnet" ? "Real money on Stellar Main Net" : "Test money on Stellar Testnet"}</p>
+              {walletMismatch && (
+                <p className="alert alert--warn">This invoice is on Stellar {netLabel}, but your wallet is on {walletNetwork === "mainnet" ? "Main Net" : "Testnet"}. Switch your wallet's network to {netLabel} to pay it.</p>
+              )}
               {receiverOk === false && (
                 <p className="alert alert--warn">This wallet can't receive {invoice.assetCode} yet. Ask {invoice.fromName || "the sender"} to enable it in SettleSync first.</p>
               )}
@@ -128,12 +139,12 @@ export default function PayPage({ token }) {
               ) : (
                 <>
                   <p className="small">Paying from <b>{shortAddr(payer)}</b>{balance !== null && <>, balance {formatAmount(balance, invoice.assetCode)}</>}</p>
-                  {payerInfo && !payerInfo.exists && <p className="alert alert--warn">Your wallet isn't active on testnet yet. Fund it with test XLM first (Friendbot).</p>}
+                  {payerInfo && !payerInfo.exists && <p className="alert alert--warn">Your wallet isn't active on Stellar yet. It needs a little XLM first.</p>}
                   {lacksTrust && (
-                    <p className="alert alert--warn">Your wallet doesn't hold USDC yet. Enable USDC in your SettleSync dashboard, then get testnet USDC from <a href="https://faucet.circle.com" target="_blank" rel="noreferrer">faucet.circle.com</a>.</p>
+                    <p className="alert alert--warn">Your wallet doesn't hold USDC yet. Enable USDC in your SettleSync dashboard and add some first.</p>
                   )}
                   {!lacksTrust && tooLow && payerInfo?.exists && <p className="alert alert--warn">Your balance is lower than the amount due.</p>}
-                  <button className="btn btn--primary btn--wide btn--lg" onClick={pay} disabled={busy || lacksTrust || receiverOk === false || (payerInfo && !payerInfo.exists)}>
+                  <button className="btn btn--primary btn--wide btn--lg" onClick={pay} disabled={busy || lacksTrust || receiverOk === false || (payerInfo && !payerInfo.exists) || walletMismatch}>
                     {busy ? "Approve in your wallet…" : `Pay ${formatAmount(remaining, invoice.assetCode)}`}
                   </button>
                 </>

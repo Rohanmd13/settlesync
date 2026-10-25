@@ -2,7 +2,7 @@
 
 USDC invoicing for freelancers and the people who pay them, on Stellar. Built in India, for everywhere. Every payment carries its invoice number in the Stellar memo field, so SettleSync matches it to the right invoice automatically, and exports a CA-ready ledger with the INR value on the day each payment arrived.
 
-**Status:** testnet pilot.
+**Status:** pilot. Works on **Stellar Main Net** (real USDC/XLM) and **Testnet** (free test money). SettleSync follows the connected wallet's network automatically.
 
 ## The problem
 
@@ -42,7 +42,7 @@ Indian Web3 developers, designers and contributors are increasingly paid in USDC
 - Local currency for totals and exports (INR default, plus USD, EUR, GBP, AED, SGD, NGN, BRL, PHP)
 - "Get test USDC" swaps test XLM for USDC on Stellar's built-in exchange (path payment)
 - Light and dark mode, opening animation, interactive ink-dot background, edge glow on overscroll, mobile and iOS layouts
-- Wrong-network warning when the connected wallet is on Main Net
+- Main Net and Testnet: follows the wallet's network, network chosen at profile setup, switchable from the account menu; pay and claim links carry their network; invoices and codes are stored separately per network
 
 ## Why SettleSync
 
@@ -62,7 +62,7 @@ npm install
 npm run dev
 ```
 
-Then open the printed URL with a Stellar wallet set to **Testnet** (Albedo works with nothing to install).
+Then open the printed URL with any Stellar wallet. Use **Testnet** to try it with free test money (Albedo works with nothing to install), or **Main Net** for real payments.
 
 ## Project structure
 
@@ -79,7 +79,7 @@ src/pages/            Landing, Dashboard (+ dash/ tabs), PayPage, Plans
 
 ## Roadmap
 
-- Mainnet launch with USDC
+- Main Net treasury wallet so Pro can be paid on Main Net
 - Pro tier (₹299/month or 3 USDC): unlimited invoices, CA export, branding, reminders
 - Invoices synced across devices
 - Milestone invoices for larger contracts using Trustless Work escrow

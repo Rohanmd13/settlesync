@@ -1,6 +1,8 @@
 // Claim codes this wallet created, kept in this browser so the sender can
 // re-share them or take the money back while they're unredeemed.
-const KEY = (addr) => `settlesync:codes:${addr}`;
+import { NETWORK } from "./stellar";
+
+const KEY = (addr) => (NETWORK.id === "mainnet" ? `settlesync:codes:mainnet:${addr}` : `settlesync:codes:${addr}`);
 
 export function loadCodes(addr) {
   try {
@@ -20,7 +22,7 @@ export function saveCodes(addr, list) {
 
 export function claimLinkFor(secret) {
   const base = `${window.location.origin}${window.location.pathname}`;
-  return `${base}#/claim/${secret}`;
+  return `${base}#/claim/${secret}${NETWORK.id === "mainnet" ? "?n=mainnet" : ""}`;
 }
 
 // Accepts a raw code (S…) or a full claim link.

@@ -120,7 +120,7 @@ export default function Account() {
           {pro?.active ? (
             <p>Pro is active until {formatDate(pro.until)}.</p>
           ) : (
-            <p className="muted">Free plan. During the testnet pilot every Pro feature is unlocked anyway.</p>
+            <p className="muted">Free plan. During the pilot every Pro feature is unlocked anyway.</p>
           )}
           <a className="btn btn--ghost btn--sm" href="#/plans">See plans</a>
         </section>

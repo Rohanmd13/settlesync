@@ -1180,3 +1180,34 @@ input:focus, select:focus { border-color: var(--ink); outline: none; box-shadow:
 @keyframes letter { from { transform: translateY(110%); } to { transform: none; } }
 @keyframes intro-stamp { from { transform: rotate(-12deg) scale(2.6); opacity: 0; } to { transform: rotate(-12deg) scale(1); opacity: 1; } }
 @media (max-width: 600px) { .intro__stamp { right: -10px; top: 10px; font-size: 0.95rem; } }
+
+/* ================= v6: networks ================= */
+.net-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; white-space: nowrap;
+  font-size: 0.78rem; font-weight: 700; background: var(--warn-bg); color: var(--warn);
+}
+.net-chip i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.net-chip--main { background: var(--paid-bg); color: var(--paid); }
+.acct__net { display: grid; gap: 6px; padding: 10px 12px; margin-bottom: 6px; border-radius: var(--r-sm); background: var(--surface-2); }
+.acct__net > span { font-size: 0.78rem; font-weight: 700; color: var(--ink-3); }
+.acct__net small { font-size: 0.76rem; color: var(--ink-2); }
+.seg--sm { padding: 3px; }
+.seg--sm button { padding: 6px 12px; font-size: 0.82rem; }
+.acct__net .seg { justify-self: start; }
+.net-pick { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.net-pick legend { font-size: 0.88rem; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; padding: 0; }
+.net-pick__opt {
+  position: relative; display: grid; gap: 2px; padding: 14px 14px 14px 42px; cursor: pointer; border-radius: var(--r);
+  border: 1.5px solid var(--rule-strong); background: var(--surface); transition: border-color 0.2s, background-color 0.2s;
+}
+.net-pick__opt input { position: absolute; left: 14px; top: 17px; width: 16px; height: 16px; accent-color: var(--bahi); }
+.net-pick__opt span { color: var(--ink-3); font-size: 0.86rem; }
+.net-pick__opt.is-on { border-color: var(--bahi); background: var(--bahi-soft); }
+.net-pick .alert, .net-pick small { grid-column: 1 / -1; margin: 0; }
+.net-pick small { color: var(--paid); font-weight: 600; }
+.pay__net { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; color: var(--ink-2); }
+input[type="date"] { cursor: pointer; }
+@media (max-width: 600px) {
+  .net-pick { grid-template-columns: 1fr; }
+  .topbar .net-chip { display: none; }
+}

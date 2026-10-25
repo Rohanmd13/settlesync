@@ -1,6 +1,7 @@
 // App-wide state: theme, connected wallet, the user's role/profile, and routing.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { initWallets, setWalletTheme, connectWallet, restoreAddress, disconnectWallet, onWalletChange, checkNetwork } from "./wallet";
+import { initWallets, setWalletTheme, connectWallet, restoreAddress, disconnectWallet, onWalletChange, getWalletNetwork, setWalletNetwork } from "./wallet";
+import { NETWORK, setNetwork, onNetworkChange } from "./stellar";
 
 const Ctx = createContext(null);
 export const useApp = () => useContext(Ctx);
@@ -75,19 +76,45 @@ export function AppProvider({ children }) {
 
   useEffect(() => setProfile(loadProfile(address)), [address]);
 
-  // Warn when the connected wallet is on Main Net while SettleSync runs on Testnet.
-  const [wrongNetwork, setWrongNetwork] = useState(false);
+  // ---------- network: follow the wallet ----------
+  // Main Net = real money, Testnet = free test money. SettleSync switches to
+  // whichever network the connected wallet is on. Pay and claim links carry
+  // their own network, so on those pages the link decides instead.
+  const [network, setNetworkState] = useState(NETWORK.id);
+  const [walletNetwork, setWalletNetworkState] = useState(null);
+  useEffect(() => onNetworkChange((id) => setNetworkState(id)), []);
+
+  const switchNetwork = useCallback((id) => {
+    setNetwork(id);
+    setWalletNetwork(id);
+    try { localStorage.setItem("settlesync:network", id); } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
-    if (!address) return setWrongNetwork(false);
-    const check = () => checkNetwork().then((r) => setWrongNetwork(!r.ok)).catch(() => {});
+    if (!address) return setWalletNetworkState(null);
+    let alive = true;
+    const check = async () => {
+      const w = await getWalletNetwork();
+      if (!alive) return;
+      setWalletNetworkState(w);
+      const r = readRoute();
+      const linkPage = r.startsWith("/pay/") || r.startsWith("/claim/");
+      if (w && w !== NETWORK.id && !linkPage) switchNetwork(w);
+      // Wallets that don't report a network (e.g. Albedo) use the profile's choice.
+      if (!w && !linkPage) {
+        const pn = loadProfile(address).network;
+        if (pn && pn !== NETWORK.id) switchNetwork(pn);
+      }
+    };
     check();
     window.addEventListener("focus", check);
-    const t = setInterval(check, 15000);
+    const t = setInterval(check, 8000);
     return () => {
+      alive = false;
       window.removeEventListener("focus", check);
       clearInterval(t);
     };
-  }, [address]);
+  }, [address, switchNetwork]);
 
   const toggleTheme = useCallback(() => {
     setTheme((t) => {
@@ -122,8 +149,8 @@ export function AppProvider({ children }) {
   );
 
   const value = useMemo(
-    () => ({ route, theme, toggleTheme, address, walletReady, connect, disconnect, profile, updateProfile, wrongNetwork }),
-    [route, theme, toggleTheme, address, walletReady, connect, disconnect, profile, updateProfile, wrongNetwork]
+    () => ({ route, theme, toggleTheme, address, walletReady, connect, disconnect, profile, updateProfile, network, walletNetwork, switchNetwork }),
+    [route, theme, toggleTheme, address, walletReady, connect, disconnect, profile, updateProfile, network, walletNetwork, switchNetwork]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

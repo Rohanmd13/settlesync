@@ -10,29 +10,82 @@ import {
   Keypair,
 } from "@stellar/stellar-sdk";
 
-// SettleSync runs on Stellar testnet for the pilot. Switching to mainnet means
-// changing these values (and the USDC issuer) in one place.
-export const NETWORK = {
-  name: "TESTNET",
-  passphrase: Networks.TESTNET,
-  horizonUrl: "https://horizon-testnet.stellar.org",
-  explorerTx: (hash) => `https://stellar.expert/explorer/testnet/tx/${hash}`,
-  explorerAccount: (a) => `https://stellar.expert/explorer/testnet/account/${a}`,
+// SettleSync works on both Stellar networks and follows the connected wallet:
+// Main Net for real money, Testnet for trying it with free test money.
+export const NETWORKS = {
+  testnet: {
+    id: "testnet",
+    name: "TESTNET",
+    label: "Testnet",
+    passphrase: Networks.TESTNET,
+    horizonUrl: "https://horizon-testnet.stellar.org",
+    explorer: "testnet",
+    // Circle's testnet USDC issuer (developers.stellar.org, x402 quickstart).
+    usdcIssuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+    treasury: "GBVWXQHFINYU67NT2OATHHHNZTPVXN5VE5TPHVY65M3LQ5JHDIOY32C7",
+  },
+  mainnet: {
+    id: "mainnet",
+    name: "PUBLIC",
+    label: "Main Net",
+    passphrase: Networks.PUBLIC,
+    horizonUrl: "https://horizon.stellar.org",
+    explorer: "public",
+    // Circle's USDC on Stellar Main Net.
+    usdcIssuer: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+    // Set to SettleSync's own Main Net wallet before taking real Pro payments.
+    treasury: null,
+  },
 };
 
-// Circle's testnet USDC issuer (developers.stellar.org, x402 quickstart).
-export const USDC_ISSUER = "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5";
+// Live view of the active network. Mutated in place by setNetwork(), so every
+// module that imported it sees the change.
+export const NETWORK = {
+  explorerTx: (hash) => `https://stellar.expert/explorer/${NETWORK.explorer}/tx/${hash}`,
+  explorerAccount: (a) => `https://stellar.expert/explorer/${NETWORK.explorer}/account/${a}`,
+};
+export let USDC_ISSUER;
+export let TREASURY;
+export let horizon;
+
+export function networkFromPassphrase(p) {
+  if (p === Networks.PUBLIC) return "mainnet";
+  if (p === Networks.TESTNET) return "testnet";
+  return null;
+}
+
+const listeners = new Set();
+export function onNetworkChange(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+export function setNetwork(id) {
+  const n = NETWORKS[id] || NETWORKS.testnet;
+  if (NETWORK.id === n.id) return;
+  Object.assign(NETWORK, n);
+  USDC_ISSUER = n.usdcIssuer;
+  TREASURY = n.treasury;
+  horizon = new Horizon.Server(n.horizonUrl);
+  nameCache.clear();
+  listeners.forEach((fn) => fn(n.id));
+}
+
+function initialNetwork() {
+  try {
+    const v = localStorage.getItem("settlesync:network");
+    if (v === "mainnet" || v === "testnet") return v;
+  } catch { /* ignore */ }
+  return "testnet";
+}
 
 // Smallest possible XLM amount. A payment request is a 0.0000001 XLM
 // transfer to the client whose memo carries the invoice ID and amount.
 export const REQUEST_NUDGE = "0.0000001";
 export const PROFILE_DATA_KEY = "ss.name";
 
-// SettleSync's own treasury wallet: receives Pro subscriptions (testnet).
-export const TREASURY = "GBVWXQHFINYU67NT2OATHHHNZTPVXN5VE5TPHVY65M3LQ5JHDIOY32C7";
 export const PRO_PRICE = { USDC: "3", XLM: "30" };
 
-export const horizon = new Horizon.Server(NETWORK.horizonUrl);
 
 export function assetFor(code) {
   return code === "USDC" ? new Asset("USDC", USDC_ISSUER) : Asset.native();
@@ -100,6 +153,7 @@ function decodeB64(b64) {
 }
 
 const nameCache = new Map();
+setNetwork(initialNetwork());
 export async function getPublicName(address) {
   if (nameCache.has(address)) return nameCache.get(address);
   try {
@@ -213,7 +267,10 @@ export async function getLatestLedger() {
   return { sequence: l.sequence, closedAt: l.closed_at };
 }
 
+export const isTestnet = () => NETWORK.id === "testnet";
+
 export async function fundWithFriendbot(address) {
+  if (!isTestnet()) throw new Error("Free test XLM is only available on Testnet.");
   const r = await fetch(`https://friendbot.stellar.org?addr=${encodeURIComponent(address)}`);
   if (!r.ok) throw new Error("Friendbot didn't respond. Try again in a minute.");
 }
@@ -321,6 +378,7 @@ export async function buildRedeem({ secret, to }) {
 
 // ---------- Pro subscription ----------
 export async function buildProPayment({ from, assetCode, publicName }) {
+  if (!TREASURY) throw new Error("Pro isn't on sale on Main Net yet. During the pilot, Pro features are free for everyone.");
   const tb = await builder(from);
   if (publicName) tb.addOperation(Operation.manageData({ name: PROFILE_DATA_KEY, value: clipBytes(publicName, 60) }));
   return tb

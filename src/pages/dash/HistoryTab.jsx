@@ -25,7 +25,7 @@ export default function HistoryTab({ payments, names }) {
   const { address, profile } = useApp();
   const [filter, setFilter] = useState("settlesync");
   const [period, setPeriod] = useState("month");
-  const [from, setFrom] = useState(() => new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10));
+  const [from, setFrom] = useState(() => new Date().toISOString().slice(0, 10));
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [exporting, setExporting] = useState(false);
   const [rates, setRates] = useState(null);

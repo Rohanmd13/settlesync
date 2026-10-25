@@ -6,8 +6,12 @@ import { RedeemBox } from "./dash/RedeemTab";
 import { WalletIcon } from "../components/Icons";
 
 // Public page for a claim link: #/claim/<code>
-export default function ClaimPage({ secret }) {
-  const { address, connect } = useApp();
+export default function ClaimPage({ secret, net = "testnet" }) {
+  const { address, connect, network, switchNetwork, walletNetwork } = useApp();
+  useEffect(() => {
+    if (net !== network) switchNetwork(net);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [net]);
   const [account, setAccount] = useState(null);
   const [preview, setPreview] = useState(undefined);
   const [err, setErr] = useState("");
@@ -53,7 +57,8 @@ export default function ClaimPage({ secret }) {
       ) : (
         <>
           <h1>Claim your payment</h1>
-          {account && !account.exists && <p className="alert alert--warn">This wallet isn't active on testnet yet. Open your dashboard and use Get test XLM first.</p>}
+          {walletNetwork && walletNetwork !== net && <p className="alert alert--warn">This code is on Stellar {net === "mainnet" ? "Main Net" : "Testnet"}. Switch your wallet to the same network before redeeming.</p>}
+          {account && !account.exists && <p className="alert alert--warn">This wallet isn't active on Stellar yet. It needs a little XLM first (on Testnet, use Add test XLM in your dashboard).</p>}
           <RedeemBox initial={secret} account={account} onRedeemed={() => getAccountInfo(address).then(setAccount)} />
           <p className="small muted"><a href="#/dashboard">Go to your dashboard</a></p>
         </>

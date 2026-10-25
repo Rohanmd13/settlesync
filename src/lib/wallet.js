@@ -8,7 +8,7 @@ import {
   SwkAppDarkTheme,
 } from "@creit.tech/stellar-wallets-kit";
 import { defaultModules } from "@creit.tech/stellar-wallets-kit/modules/utils";
-import { NETWORK } from "./stellar";
+import { NETWORK, networkFromPassphrase } from "./stellar";
 
 let initialised = false;
 
@@ -27,7 +27,7 @@ export function initWallets(mode = "light") {
   if (initialised) return;
   StellarWalletsKit.init({
     modules: defaultModules(),
-    network: Networks.TESTNET,
+    network: NETWORK.passphrase,
     theme: kitTheme(mode),
     authModal: { showInstallLabel: true },
   });
@@ -84,11 +84,28 @@ export function onWalletChange(cb) {
   return () => offs.forEach((off) => typeof off === "function" && off());
 }
 
+// Which network the connected wallet is on: "mainnet", "testnet", or null if it doesn't say.
+export async function getWalletNetwork() {
+  try {
+    const { networkPassphrase } = await StellarWalletsKit.getNetwork();
+    return networkFromPassphrase(networkPassphrase);
+  } catch {
+    return null;
+  }
+}
+
+export function setWalletNetwork(id) {
+  if (!initialised) return;
+  try {
+    StellarWalletsKit.setNetwork(id === "mainnet" ? Networks.PUBLIC : Networks.TESTNET);
+  } catch { /* older kit */ }
+}
+
 export async function checkNetwork() {
   try {
     const { networkPassphrase } = await StellarWalletsKit.getNetwork();
     if (networkPassphrase && networkPassphrase !== NETWORK.passphrase) {
-      return { ok: false, message: "Your wallet is on the wrong network. Switch it to Testnet in the wallet's settings." };
+      return { ok: false, message: `Your wallet is on a different network from SettleSync (${NETWORK.label}). Switch one of them so they match.` };
     }
   } catch {
     /* some wallets (e.g. Albedo) don't report a network; signing still targets testnet */

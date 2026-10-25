@@ -16,7 +16,7 @@ export function Avatar({ name, address, size = 34 }) {
 }
 
 export default function Header() {
-  const { route, theme, toggleTheme, address, connect, disconnect, profile, wrongNetwork } = useApp();
+  const { route, theme, toggleTheme, address, connect, disconnect, profile, network, walletNetwork, switchNetwork } = useApp();
   const [open, setOpen] = useState(false);
   const [acct, setAcct] = useState(false);
   const [err, setErr] = useState("");
@@ -95,6 +95,7 @@ export default function Header() {
               {!route.startsWith("/dashboard") && (
                 <a href="#/dashboard" className="btn btn--primary btn--sm topbar__dash">Dashboard</a>
               )}
+              <NetChip network={network} />
               <div className="acct" ref={acctRef}>
                 <button className="acct__btn" onClick={() => setAcct((a) => !a)} aria-expanded={acct} aria-haspopup="menu" title={address}>
                   <Avatar name={profile.name} address={address} size={28} />
@@ -116,6 +117,14 @@ export default function Header() {
                       <span>{shortAddr(address)}</span>
                       <span className="acct__copy"><CopyIcon /> {copied === "addr" ? "Copied" : "Copy address"}</span>
                     </button>
+                    <div className="acct__net" role="group" aria-label="Network">
+                      <span>Network</span>
+                      <div className="seg seg--sm">
+                        <button className={network === "mainnet" ? "is-on" : ""} onClick={() => switchNetwork("mainnet")}>Main Net</button>
+                        <button className={network === "testnet" ? "is-on" : ""} onClick={() => switchNetwork("testnet")}>Testnet</button>
+                      </div>
+                      <small>{walletNetwork && walletNetwork !== network ? "Your wallet is on the other network. Switch it in your wallet too." : network === "mainnet" ? "Real USDC and XLM." : "Free test money for trying things out."}</small>
+                    </div>
                     <a href="#/dashboard" role="menuitem">Dashboard</a>
                     <a href="#/account" role="menuitem">Profile, currency and backup</a>
                     <a href={NETWORK.explorerAccount(address)} target="_blank" rel="noreferrer" role="menuitem">View on Stellar explorer</a>
@@ -136,11 +145,7 @@ export default function Header() {
         </div>
       </header>
       {err && <p className="alert alert--error topbar__err" role="alert">{err}</p>}
-      {wrongNetwork && (
-        <div className="net-banner" role="alert">
-          <b>Your wallet is on Main Net.</b> SettleSync is in its testnet pilot, so switch your wallet's network to <b>Testnet</b> (in Freighter: the network menu at the top). No real money is used here.
-        </div>
-      )}
+
 
       <div className={`drawer-scrim ${open ? "is-open" : ""}`} onClick={() => setOpen(false)} aria-hidden="true" />
       <aside id="site-menu" className={`drawer ${open ? "is-open" : ""}`} aria-label="Menu" aria-hidden={!open} inert={!open}>
@@ -202,6 +207,15 @@ export default function Header() {
   );
 }
 
+export function NetChip({ network }) {
+  const main = network === "mainnet";
+  return (
+    <span className={`net-chip ${main ? "net-chip--main" : ""}`} title={main ? "Stellar Main Net: real money" : "Stellar Testnet: free test money"}>
+      <i aria-hidden="true" />{main ? "Main Net" : "Testnet"}
+    </span>
+  );
+}
+
 export function Footer() {
   return (
     <footer className="footer">
@@ -219,7 +233,7 @@ export function Footer() {
           <a href="https://stellar.org" target="_blank" rel="noreferrer">Built on Stellar</a>
         </nav>
       </div>
-      <p className="footer__legal">Testnet pilot: no real funds move. Currency figures are for record keeping, not tax advice. <a href="#/owner" className="footer__owner">Team</a></p>
+      <p className="footer__legal">Works on Stellar Main Net with real USDC, and on Testnet with free test money. SettleSync follows your wallet's network and never holds your funds. Currency figures are for record keeping, not tax advice. <a href="#/owner" className="footer__owner">Team</a></p>
     </footer>
   );
 }

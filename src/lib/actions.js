@@ -13,6 +13,7 @@ import {
   buildRedeem,
   buildProPayment,
   buildTestUsdcSwap,
+  NETWORK,
 } from "./stellar";
 import { signWithWallet } from "./wallet";
 
@@ -30,7 +31,7 @@ export async function sendPaymentRequest({ from, clientAddress, invoice, publicN
     throw new Error("This amount has too many digits to fit in a request. Use fewer decimal places.");
   }
   const info = await getAccountInfo(to);
-  if (!info.exists) throw new Error("That wallet isn't active on Stellar testnet yet. Ask your client to fund it first, or send them the pay link instead.");
+  if (!info.exists) throw new Error(`That wallet isn't active on Stellar ${NETWORK.label} yet. Ask your client to add a little XLM first, or send them the pay link instead.`);
   const xdr = await buildPaymentRequest({
     from,
     to,
@@ -54,7 +55,7 @@ export async function payDirect({ from, to, amount, assetCode, note }) {
   if (!isValidAddress(dest)) throw new Error("That doesn't look like a Stellar address. It starts with G and is 56 characters long.");
   if (dest === from) throw new Error("That's your own wallet.");
   const info = await getAccountInfo(dest);
-  if (!info.exists) throw new Error("That wallet isn't active on Stellar testnet yet. Send a claim code instead; it works for any wallet.");
+  if (!info.exists) throw new Error(`That wallet isn't active on Stellar ${NETWORK.label} yet. Send a claim code instead; it works for any wallet.`);
   if (assetCode === "USDC" && !info.hasUsdcTrustline) throw new Error("That wallet can't receive USDC yet. Send XLM, or a claim code they can redeem once USDC is enabled.");
   const xdr = await buildDirectPayment({ from, to: dest, amount, assetCode, note });
   return submitSigned(await signWithWallet(xdr, from));
