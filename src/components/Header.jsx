@@ -61,7 +61,34 @@ export default function Header() {
     onConnect();
   };
 
-  const at = (p) => (p === "/" ? route === "/" : route.startsWith(p));
+  // On the home page, underline the nav item for the section in view.
+  const onLanding = ["/", "/why", "/how", "/who", "/stellar", "/faq"].includes(route);
+  const [spy, setSpy] = useState("/");
+  useEffect(() => {
+    if (!onLanding) return;
+    const ORDER = [["how", "/how"], ["why", "/why"], ["who", "/why"], ["stellar", "/why"], ["faq", "/faq"]];
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      let cur = "/";
+      for (const [id, to] of ORDER) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= 140) cur = to;
+      }
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) cur = "/faq";
+      setSpy(cur);
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
+    update();
+    const t = setTimeout(update, 900);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); clearTimeout(t); if (raf) cancelAnimationFrame(raf); };
+  }, [onLanding, route]);
+  const at = (p) => {
+    if (onLanding && ["/", "/why", "/how", "/faq"].includes(p)) return spy === p;
+    return p === "/" ? route === "/" : route.startsWith(p);
+  };
   const NavLink = ({ to, children }) => (
     <a href={`#${to}`} className={`nav__link ${at(to) ? "is-active" : ""}`} aria-current={at(to) ? "page" : undefined}>
       {children}

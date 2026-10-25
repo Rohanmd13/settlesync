@@ -37,6 +37,12 @@ export default function Intro() {
     const t = setTimeout(() => {
       setShow(false);
       document.body.classList.remove("no-scroll");
+      // First visit always lands on the home page, whatever link was opened.
+      const r = window.location.hash.replace(/^#/, "") || "/";
+      if (!["/", "/why", "/how", "/who", "/stellar", "/faq"].includes(r)) {
+        window.location.hash = "#/";
+        window.scrollTo(0, 0);
+      }
     }, 750);
     return () => clearTimeout(t);
   }, [leaving]);

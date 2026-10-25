@@ -299,8 +299,8 @@ function Workspace() {
         </div>
 
         <div className="balances">
-          <div><span>XLM</span><b>{account?.exists ? Number(account.xlm).toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</b></div>
-          <div><span>USDC</span><b>{account?.hasUsdcTrustline ? Number(account.usdc).toLocaleString("en-US", { maximumFractionDigits: 2 }) : "off"}</b></div>
+          <div><span>XLM</span>{account?.exists ? <b>{Number(account.xlm).toLocaleString("en-US", { maximumFractionDigits: 2 })}</b> : <b className="bal-note" title="This wallet has no XLM yet, so it isn't active on Stellar.">0, not active</b>}</div>
+          <div><span>USDC</span>{account?.hasUsdcTrustline ? <b>{Number(account.usdc).toLocaleString("en-US", { maximumFractionDigits: 2 })}</b> : <b className="bal-note" title="This wallet can't hold USDC until you turn it on (a one-time approval).">Not turned on</b>}</div>
           {NETWORK.id === "testnet" && <details className="topup">
             <summary>Testnet top-up</summary>
             <p>Free test money for trying SettleSync. Not real funds.</p>

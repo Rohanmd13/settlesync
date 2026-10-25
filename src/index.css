@@ -882,6 +882,7 @@ input:focus, select:focus { border-color: var(--ink); outline: none; box-shadow:
 .balances > div:not(.balances__tools) { display: grid; }
 .balances span { font-size: 0.74rem; color: var(--ink-3); font-weight: 600; }
 .balances b { font-variant-numeric: tabular-nums; font-size: 1.05rem; }
+.balances b.bal-note { font-size: 0.82rem; font-weight: 600; color: var(--ink-3); padding-top: 3px; }
 .balances__tools { grid-column: 1 / -1; display: flex; gap: 14px; border-top: 1px solid var(--rule); padding-top: 8px; }
 .balances__tools .linkish { text-decoration: none; font-weight: 600; }
 .balances__tools .linkish:disabled { opacity: 0.5; }
