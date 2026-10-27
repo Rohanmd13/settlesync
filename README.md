@@ -23,8 +23,12 @@ Developers, designers and contributors are increasingly paid in USDC by DAOs, gr
    - **Pay link:** share on WhatsApp, email or as a QR code. The client opens it, connects any Stellar wallet and pays in one click. No account needed.
    - **Wallet request:** enter the client's Stellar address. SettleSync sends the request on Stellar itself (a 0.0000001 XLM payment with memo `R:<invoiceId>:<amount>:<asset>`). It appears in the client's **Bills to pay** on any device.
    - **Claim code (client pays first):** the client locks the amount in a fresh one-time Stellar account, created and funded in one transaction co-signed by the payer's wallet and the one-time key. The code is that key: the recipient redeems it, SettleSync pays them, removes the trustline and data entries, and merges the account back to the payer so the XLM deposit returns. Unredeemed codes can be taken back.
-3. **It marks itself paid:** the invoice ID is the payment's text memo. SettleSync watches incoming payments on Horizon and matches by memo and asset. Part-payments add up until the invoice is fully paid.
-4. **Export for your accountant:** a formatted Excel workbook with every payment, the local-currency rate on the receipt day, totals, filters and a link to each transaction as proof. Plus a branded one-page PDF invoice.
+3. **Part payments, if you allow them:** turn on *Allow part payments* when creating the invoice, optionally with a minimum per payment. The client chooses how much to pay each time (an advance now, the rest on delivery) from the same link or Bills to pay. The last part may be smaller than the minimum, so an invoice can always be finished.
+4. **Pay in any currency:** the client can pay with any asset in their wallet that Stellar can convert, for example XLM for a USDC invoice. SettleSync uses a **path payment (strict receive)**: Stellar's built-in exchange converts it inside the same transaction, the freelancer receives exactly the invoiced amount, and the client sees the price first and never spends more than 1% above it.
+5. **It marks itself paid:** the invoice ID is the payment's text memo. SettleSync watches incoming payments (including path payments) on Horizon and matches by memo and asset. Parts add up until the invoice is fully paid.
+6. **Export for your accountant:** a formatted Excel workbook with every payment, the local-currency rate on the receipt day, totals, filters and a link to each transaction as proof. Plus a branded one-page PDF invoice.
+
+![Paying part of a USDC invoice with XLM](docs/screenshots/part-and-convert.png)
 
 | Invoice and pay link | What the client sees |
 | --- | --- |
@@ -49,6 +53,7 @@ The [tester guide](docs/SettleSync-Tester-Guide.pdf) has step-by-step tests for 
 | Memo-encoded **payment requests** | Bills delivered to a client's wallet with no server; invoices restorable from the chain |
 | One-time account, co-signed, then **account merge** | Claim codes the client can send before an invoice exists |
 | **manageData** (`ss.name`) | Display name stored on the user's own account, so people see names, not addresses |
+| **Path payment** (strict receive) | Client pays with any asset they hold; converted inside the payment so the freelancer gets the exact invoice amount |
 | **changeTrust** | One-click USDC (Circle) trustline |
 | **Path payment** (strict send) | Swap test XLM for test USDC on Stellar's built-in exchange |
 | **Horizon** payments API | Matching, history and totals |
@@ -64,7 +69,9 @@ Non-custodial: funds move wallet to wallet; SettleSync never holds them or any k
 - Invoices, Bills to pay, Send money (direct or claim code), Redeem a code, and full payment History with search and filters
 - History totals (received, sent, net) for this month, this year, all time or any date range
 - Pay links with QR codes, WhatsApp sharing and overdue reminders
-- Part-payments add up automatically; branded A4 invoice PDF with pay QR code
+- Part payments: an on/off toggle per invoice with an optional minimum per payment; parts add up automatically
+- Pay in any currency: the client picks what to pay with (XLM, USDC or any convertible asset), sees the price, and the freelancer receives exactly the invoice amount
+- Branded A4 invoice PDF with pay QR code
 - Local currency for totals and exports: INR, USD, EUR, GBP, AED, SGD, NGN, BRL, PHP
 - Backup/restore, and automatic restore of wallet-requested invoices from Stellar
 - Pro subscription paid on-chain; hidden owner dashboard (`#/owner`) reads revenue live from the treasury
@@ -81,6 +88,8 @@ Non-custodial: funds move wallet to wallet; SettleSync never holds them or any k
 | Time to settle | About 5 seconds | Seconds | 1 to 5 days | Days |
 | Cost to get paid | Under ₹0.01 network fee | Network fee | 3 to 5% + FX | 10 to 20% commission |
 | Client can pay before an invoice | Claim codes | Only with your address | Yes | No |
+| Pay in parts, tracked automatically | With a minimum you set | By hand | Tracked by hand | Milestones on some |
+| Client pays in a different currency | Converted inside the payment | Only the asset you accept | With 3 to 5% FX costs | Card or bank only |
 | Accountant export in local currency | One click | No | Statements only | Platform reports |
 | Who holds the money | You | You | Bank / PayPal | Platform |
 
@@ -98,7 +107,8 @@ Then open the printed URL with any Stellar wallet. Use **Testnet** to try it wit
 ```
 src/lib/stellar.js       Networks, Horizon, transaction builders, result-code messages
 src/lib/wallet.js        Stellar Wallets Kit: connect, network detection, signing
-src/lib/actions.js       Pay invoice, payment requests, claim codes, direct pay, Pro
+src/lib/actions.js       Pay invoice (direct or converted), payment requests, claim codes, direct pay, Pro
+src/components/PayBox.jsx  Part-payment amount and pay-with-any-currency picker
 src/lib/invoices.js      Invoice IDs, pay links, memo matching, statuses
 src/lib/codes.js         Claim code storage and links
 src/lib/xlsx.js          Formatted Excel exports (ledger, history)
@@ -108,13 +118,20 @@ src/pages/               Landing, Dashboard (+ dash/ tabs), PayPage, ClaimPage, 
 docs/                    Tester guide and screenshots
 ```
 
-## Roadmap
+## What's next
 
-- Main Net treasury wallet so Pro can be paid on Main Net
-- Custom domain
-- Invoices synced across devices
-- Milestone invoices for larger contracts with Soroban escrow
-- Local-currency off-ramp (INR first) through a regulated partner
+If the pilot proves useful, this is what we build next (also on the site under *What's next*):
+
+| Status | Feature |
+| --- | --- |
+| Next | **Milestone escrow:** the client locks the full amount in a Soroban smart contract; each milestone's share is released when approved |
+| Next | **Split payouts for teams:** one invoice, paid once, shared out automatically (say 60/40) in the same Stellar transaction |
+| Planned | **Retainers:** monthly invoices that create and send themselves, with reminders |
+| Planned | **Cash out to your bank:** USDC to rupees or local currency through regulated Stellar anchors |
+| Planned | **Invoices on every device:** encrypted sync |
+| Exploring | **More currencies to bill in:** EURC and other Stellar stablecoins |
+
+Also on the list: a Main Net treasury wallet so Pro can be paid on Main Net, and a custom domain.
 
 ## Author
 
