@@ -229,6 +229,15 @@ export function rememberPending(rec) {
   }
 }
 
+// The label SettleSync uses for an asset. Only Circle's USDC (the official issuer
+// on this network) is "USDC"; anyone can create a token called USDC, so any other
+// issuer gets a label that can never match a USDC invoice, total or export.
+export function assetLabel(type, code, issuer) {
+  if (type === "native" || !code) return "XLM";
+  if (code === "USDC" && issuer === USDC_ISSUER) return "USDC";
+  return `${code} (unofficial, ${String(issuer || "").slice(0, 4)}…)`;
+}
+
 export function assetKey(code, issuer) {
   return !code || code === "XLM" ? "XLM" : `${code}:${issuer}`;
 }
@@ -257,7 +266,7 @@ export async function quoteConversions({ payer, assetCode, amount }) {
   const best = new Map();
   for (const r of res.records) {
     const code = r.source_asset_type === "native" ? "XLM" : r.source_asset_code;
-    if (code === assetCode && (code === "XLM" || r.source_asset_issuer === USDC_ISSUER)) continue;
+    if (assetLabel(r.source_asset_type, r.source_asset_code, r.source_asset_issuer) === assetCode) continue;
     const key = assetKey(code, r.source_asset_issuer);
     const prev = best.get(key);
     if (prev && Number(prev.sourceAmount) <= Number(r.source_amount)) continue;
@@ -342,8 +351,8 @@ export async function getAccountPayments(address, limit = 200) {
     .map((r) => {
       const isCreate = r.type === "create_account";
       const isPath = r.type.startsWith("path_payment");
-      const srcCode = isPath ? (r.source_asset_type === "native" ? "XLM" : r.source_asset_code) : null;
-      const destCode = isCreate || r.asset_type === "native" ? "XLM" : r.asset_code;
+      const srcCode = isPath ? assetLabel(r.source_asset_type, r.source_asset_code, r.source_asset_issuer) : null;
+      const destCode = isCreate ? "XLM" : assetLabel(r.asset_type, r.asset_code, r.asset_issuer);
       const to = isCreate ? r.account : r.to;
       const from = isCreate ? r.funder : r.from;
       return {
@@ -354,7 +363,8 @@ export async function getAccountPayments(address, limit = 200) {
         direction: to === address ? "in" : "out",
         type: isCreate ? "create" : "payment",
         amount: isCreate ? r.starting_balance : r.amount,
-        assetCode: isCreate || r.asset_type === "native" ? "XLM" : r.asset_code,
+        assetCode: destCode,
+        assetIssuer: isCreate || r.asset_type === "native" ? null : r.asset_issuer,
         memo: r.transaction_attr?.memo_type === "text" ? r.transaction_attr.memo : null,
         createdAt: r.created_at,
         // Paid in another asset and converted on the way (path payment)
@@ -527,9 +537,14 @@ export async function buildProPayment({ from, assetCode, publicName }) {
     .toXDR();
 }
 
+// A real Pro payment: memo PRO…, the full price, in official USDC or XLM (never a look-alike token).
+export function isProPayment(p) {
+  return (p.memo || "").startsWith("PRO") && p.assetCode in PRO_PRICE && Number(p.amount) + 1e-7 >= Number(PRO_PRICE[p.assetCode]);
+}
+
 export function proStatus(payments, me) {
   const last = payments
-    .filter((p) => p.direction === "out" && p.from === me && p.to === TREASURY && (p.memo || "").startsWith("PRO"))
+    .filter((p) => p.direction === "out" && p.from === me && p.to === TREASURY && !p.pending && isProPayment(p))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   if (!last) return { active: false };
   const until = new Date(new Date(last.createdAt).getTime() + 30 * 864e5);

@@ -36,7 +36,7 @@ export async function payInvoice({ payer, to, amount, assetCode, invoiceId, via 
     amount,
     assetCode,
     memo: invoiceId || null,
-    paidWith: via ? { amount: via.sourceAmount || via.sendMax, assetCode: via.code } : null,
+    paidWith: via ? { amount: via.sourceAmount || via.sendMax, assetCode: via.label || via.code } : null,
   });
   return res;
 }

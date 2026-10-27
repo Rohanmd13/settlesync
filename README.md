@@ -101,6 +101,7 @@ Non-custodial: funds move wallet to wallet; SettleSync never holds them or any k
 - **Non-custodial:** every transaction is built in the browser and approved in the user's own wallet. SettleSync has no server, no keys and no database of funds.
 - **Untrusted input is validated:** pay links, on-chain request memos and backup files are checked field by field; anything malformed is rejected. All text is escaped (React, and the PDF builder), and was tested against HTML/script injection.
 - **No double payments:** what's left on an invoice is re-checked on Stellar right before paying, and just-sent payments update the page instantly, so an invoice can't be overpaid from a stale page.
+- **Only real USDC counts:** anyone can create a token named "USDC", so SettleSync checks the issuer. Only Circle's USDC can pay a USDC invoice or count in totals, exports, Pro or revenue; look-alikes show as "USDC (unofficial, G…)". Pro needs a full-price payment, not just the PRO memo.
 - **Converted payments are capped:** a client never spends more than 1% above the quoted price (`sendMax` on the path payment).
 - **Claim codes:** previews show what the code account really holds, never the amount written on it. Redeeming is signed by the code alone, so the redeemer's wallet signs nothing.
 - **Name check:** the pay page shows whether the name on a link matches the name the wallet published on Stellar, and warns if it doesn't.

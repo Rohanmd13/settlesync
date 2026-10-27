@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getAccountInfo, getAccountPayments, getPublicName, TREASURY, NETWORK, shortAddr } from "../lib/stellar";
+import { getAccountInfo, getAccountPayments, getPublicName, TREASURY, NETWORK, shortAddr, isProPayment } from "../lib/stellar";
 import { useApp } from "../lib/app";
 import { liveRates, formatFiat } from "../lib/inr";
 import { formatAmount, formatDate, relativeTime } from "../lib/invoices";
@@ -108,7 +108,7 @@ function OwnerRevenue({ onLock, network, switchNetwork }) {
     return () => clearInterval(t);
   }, []);
 
-  const allSubs = useMemo(() => (payments || []).filter((p) => p.direction === "in" && (p.memo || "").startsWith("PRO")), [payments]);
+  const allSubs = useMemo(() => (payments || []).filter((p) => p.direction === "in" && !p.pending && isProPayment(p)), [payments]);
   const testCount = allSubs.filter((p) => TEAM_TEST_WALLETS.has(p.from)).length;
   const subs = useMemo(() => (showTest ? allSubs : allSubs.filter((p) => !TEAM_TEST_WALLETS.has(p.from))), [allSubs, showTest]);
 

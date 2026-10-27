@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatAmount, partAmountError, matchPayments, remainingOf } from "../lib/invoices";
-import { quoteConversions, assetKey, USDC_ISSUER, CONVERSION_BUFFER, getIncomingPayments } from "../lib/stellar";
+import { quoteConversions, assetKey, assetLabel, USDC_ISSUER, CONVERSION_BUFFER, getIncomingPayments } from "../lib/stellar";
 import { payInvoice } from "../lib/actions";
 
 const trim7 = (n) => Number(n).toFixed(7).replace(/\.?0+$/, "");
@@ -63,6 +63,7 @@ export default function PayBox({ inv, remaining, payer, payerInfo, payeeName, bl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options.map((o) => `${o.key}${o.enough}`).join()]);
 
+  const label = (o) => assetLabel(o.code === "XLM" ? "native" : "credit", o.code, o.issuer);
   const chosen = options.find((o) => o.key === (payWith || ownKey)) || null;
   const converting = chosen && !chosen.direct;
 
@@ -70,7 +71,7 @@ export default function PayBox({ inv, remaining, payer, payerInfo, payeeName, bl
     setErr("");
     if (amtErr) return setErr(amtErr);
     if (!chosen) return setErr(`Your wallet has nothing Stellar can turn into ${inv.assetCode} right now. Add ${inv.assetCode} or XLM first.`);
-    if (!chosen.enough) return setErr(`Not enough ${chosen.code} in your wallet for this payment.`);
+    if (!chosen.enough) return setErr(`Not enough ${label(chosen)} in your wallet for this payment.`);
     setBusy(true);
     try {
       // Re-check what's left on Stellar right before paying, so an invoice can't be
@@ -94,9 +95,9 @@ export default function PayBox({ inv, remaining, payer, payerInfo, payeeName, bl
           }
         }
       }
-      const via = converting ? { code: chosen.code, issuer: chosen.issuer, sendMax: chosen.sendMax, sourceAmount: chosen.sourceAmount, path: chosen.path } : undefined;
+      const via = converting ? { code: chosen.code, issuer: chosen.issuer, sendMax: chosen.sendMax, sourceAmount: chosen.sourceAmount, path: chosen.path, label: label(chosen) } : undefined;
       const res = await payInvoice({ payer, to: inv.to, amount: amt, assetCode: inv.assetCode, invoiceId: inv.id, via });
-      onPaid?.({ amount: Number(amt), hash: res.hash, paidWith: converting ? chosen.code : null });
+      onPaid?.({ amount: Number(amt), hash: res.hash, paidWith: converting ? label(chosen) : null });
     } catch (e) {
       setErr(e.message);
       onError?.(e.message);
@@ -105,10 +106,9 @@ export default function PayBox({ inv, remaining, payer, payerInfo, payeeName, bl
     }
   };
 
-  const label = (o) => (o.code === "USDC" || o.code === "XLM" ? o.code : `${o.code} (${o.issuer?.slice(0, 4)}…)`);
   const payLabel = busy
     ? "Approve in your wallet…"
-    : `${verb} ${formatAmount(amt || 0, inv.assetCode)}${converting ? ` with ${chosen.code}` : ""}`;
+    : `${verb} ${formatAmount(amt || 0, inv.assetCode)}${converting ? ` with ${label(chosen)}` : ""}`;
 
   return (
     <div className="paybox">
@@ -155,7 +155,7 @@ export default function PayBox({ inv, remaining, payer, payerInfo, payeeName, bl
                   <button key={o.key} type="button" role="radio" aria-checked={on} className={`paybox__opt ${on ? "is-on" : ""} ${o.enough ? "" : "is-short"}`} onClick={() => setPayWith(o.key === ownKey ? null : o.key)}>
                     <b>{label(o)}</b>
                     <span>
-                      {o.direct ? `Balance ${formatAmount(balanceOf(o.key), o.code)}` : `About ${formatAmount(o.sourceAmount, o.code)}`}
+                      {o.direct ? `Balance ${formatAmount(balanceOf(o.key), label(o))}` : `About ${formatAmount(o.sourceAmount, label(o))}`}
                       {!o.enough && " · not enough"}
                     </span>
                   </button>
@@ -167,7 +167,7 @@ export default function PayBox({ inv, remaining, payer, payerInfo, payeeName, bl
           {converting && (
             <p className="paybox__conv">
               Stellar converts it inside the payment: {payeeName ? `${payeeName} receives` : "they receive"} exactly <b>{formatAmount(amt, inv.assetCode)}</b>, and you spend about{" "}
-              <b>{formatAmount(chosen.sourceAmount, chosen.code)}</b> (at most {formatAmount(chosen.sendMax, chosen.code)}, a {CONVERSION_BUFFER * 100}% buffer in case the price moves).
+              <b>{formatAmount(chosen.sourceAmount, label(chosen))}</b> (at most {formatAmount(chosen.sendMax, label(chosen))}, a {CONVERSION_BUFFER * 100}% buffer in case the price moves).
             </p>
           )}
         </div>
