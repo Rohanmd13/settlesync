@@ -66,11 +66,14 @@ Non-custodial: funds move wallet to wallet; SettleSync never holds them or any k
 ## Features
 
 - Roles: Freelancer, Business/agency (GSTIN on invoices), Client/company, each with its own dashboard layout
+- Simple dashboard: Money coming in (My invoices, Redeem a code), Money going out (Bills to pay, Send money), Records (History)
 - Invoices, Bills to pay, Send money (direct or claim code), Redeem a code, and full payment History with search and filters
 - History totals (received, sent, net) for this month, this year, all time or any date range
 - Pay links with QR codes, WhatsApp sharing and overdue reminders
 - Part payments: an on/off toggle per invoice with an optional minimum per payment; parts add up automatically
 - Pay in any currency: the client picks what to pay with (XLM, USDC or any convertible asset), sees the price, and the freelancer receives exactly the invoice amount
+- Send money to any wallet in USDC or XLM, paying with whatever you hold (converted on Stellar)
+- Part-paid pay-link invoices stay in the payer's Bills to pay until finished; amounts are re-checked on Stellar right before paying, so an invoice can't be overpaid
 - Branded A4 invoice PDF with pay QR code
 - Local currency for totals and exports: INR, USD, EUR, GBP, AED, SGD, NGN, BRL, PHP
 - Backup/restore, and automatic restore of wallet-requested invoices from Stellar
