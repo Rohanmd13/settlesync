@@ -7,7 +7,7 @@ import { NETWORK, shortAddr } from "../../lib/stellar";
 import { DownloadIcon } from "../../components/Icons";
 import { liveRates, formatFiat } from "../../lib/inr";
 
-const FILTERS = { all: "Everything", settlesync: "SettleSync only", in: "Received", out: "Sent" };
+const FILTERS = { all: "Everything", in: "Received", out: "Sent" };
 const PERIODS = { month: "This month", year: "This year", all: "All time", custom: "Custom dates" };
 
 // Money that actually moved: excludes request nudges and the deposit locked in a claim code.
@@ -23,7 +23,7 @@ function periodRange(period, from, to) {
 
 export default function HistoryTab({ payments, names }) {
   const { address, profile } = useApp();
-  const [filter, setFilter] = useState("settlesync");
+  const [filter, setFilter] = useState("all");
   const [period, setPeriod] = useState("month");
   const [from, setFrom] = useState(() => localDay());
   const [to, setTo] = useState(() => localDay());
@@ -46,7 +46,6 @@ export default function HistoryTab({ payments, names }) {
   const rows = useMemo(
     () =>
       all.filter(inPeriod).filter((p) => {
-        if (filter === "settlesync") return p.what.kind !== "other";
         if (filter === "in" || filter === "out") return p.direction === filter;
         return true;
       }),
@@ -81,10 +80,14 @@ export default function HistoryTab({ payments, names }) {
     return [...m.entries()];
   }, [rows]);
 
+  const [exportErr, setExportErr] = useState("");
   const exportCsv = async () => {
     setExporting(true);
+    setExportErr("");
     try {
       await downloadHistoryXlsx(rows, address, profile.currency || "INR");
+    } catch (e) {
+      setExportErr(`Couldn't build the Excel file: ${e.message}`);
     } finally {
       setExporting(false);
     }
@@ -134,6 +137,7 @@ export default function HistoryTab({ payments, names }) {
           <button className="btn btn--ghost" onClick={exportCsv} disabled={!rows.length || exporting}><DownloadIcon /> {exporting ? "Preparing…" : "Download Excel"}</button>
         </div>
       </div>
+      {exportErr && <p className="alert alert--error">{exportErr}</p>}
 
       {rows.length === 0 ? (
         <div className="ledger"><div className="empty empty--small"><p>{all.length ? "No payments in this period. Try All time or other dates." : "Nothing here yet. Payments and requests appear as soon as they happen on Stellar."}</p></div></div>

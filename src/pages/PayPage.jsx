@@ -3,7 +3,7 @@ import InvoiceSheet from "../components/InvoiceSheet";
 import { printInvoice } from "../lib/printInvoice";
 import { PrintIcon, WalletIcon, BackIcon } from "../components/Icons";
 import { useApp, go } from "../lib/app";
-import { decodePayLink, matchPayments, statusOf, formatAmount, remainingOf } from "../lib/invoices";
+import { decodePayLink, matchPayments, statusOf, formatAmount, remainingOf, rememberLinkBill } from "../lib/invoices";
 import { NETWORK, getAccountInfo, getIncomingPayments, shortAddr, sep7PayUri } from "../lib/stellar";
 import PayBox from "../components/PayBox";
 
@@ -67,6 +67,7 @@ export default function PayPage({ token }) {
   };
 
   const onPaid = ({ amount, hash, paidWith }) => {
+    rememberLinkBill(payer, invoice);
     const received = (view.received || 0) + amount;
     const full = received + 1e-7 >= Number(invoice.amount);
     setResult({ hash, amount, paidWith, full });
@@ -107,7 +108,7 @@ export default function PayPage({ token }) {
             <div className="pay__box">
               {result && !result.full && (
                 <p className="alert alert--success">
-                  Paid {formatAmount(result.amount, invoice.assetCode)}{result.paidWith ? ` (with ${result.paidWith})` : ""}. {invoice.fromName || "They"} will see it on the invoice automatically.{" "}
+                  Paid {formatAmount(result.amount, invoice.assetCode)}{result.paidWith ? ` (with ${result.paidWith})` : ""}. {invoice.fromName || "They"} will see it on the invoice automatically. The rest is waiting in your <a href="#/dashboard/bills">Bills to pay</a>, so you don't need this link again.{" "}
                   <a href={NETWORK.explorerTx(result.hash)} target="_blank" rel="noreferrer">View transaction</a>
                 </p>
               )}
@@ -136,13 +137,14 @@ export default function PayPage({ token }) {
                   <p className="small">Paying from <b>{shortAddr(payer)}</b></p>
                   {payerInfo && !payerInfo.exists && <p className="alert alert--warn">Your wallet isn't active on Stellar yet. It needs a little XLM first.</p>}
                   <PayBox
-                    inv={invoice}
+                    inv={view}
                     remaining={remaining}
                     payer={payer}
                     payerInfo={payerInfo}
                     payeeName={invoice.fromName}
                     blocked={receiverOk === false || (payerInfo && !payerInfo.exists) || walletMismatch}
                     onPaid={onPaid}
+                    onStale={(fresh) => setState(fresh)}
                   />
                 </>
               )}

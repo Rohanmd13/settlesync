@@ -6,6 +6,7 @@ import {
   saveInvoices,
   matchPayments,
   billsFor,
+  loadLinkBills,
   mergeRequestedFromChain,
   statusOf,
   invoicesThisMonth,
@@ -123,13 +124,13 @@ function Onboarding() {
 }
 
 const SECTIONS = {
-  invoices: { label: "Invoices", group: "get", title: "Invoices", blurb: "Invoices you've sent, and whether they're paid. Payments match themselves." },
-  redeem: { label: "Redeem a code", group: "get", title: "Redeem a claim code", blurb: "Someone sent you a SettleSync claim code? Paste it here to move the money into this wallet." },
-  bills: { label: "Bills to pay", group: "pay", title: "Bills to pay", blurb: "Payment requests sent straight to this wallet. Pay with one tap." },
-  send: { label: "Send money", group: "pay", title: "Send money", blurb: "Pay someone who hasn't billed you yet: straight to their wallet, or as a claim code they redeem." },
-  history: { label: "History", group: "rec", title: "Payment history", blurb: "Everything this wallet sent and received, labelled, with proof on Stellar." },
+  invoices: { label: "My invoices", hint: "Bill a client, see who paid", group: "get", title: "Invoices", blurb: "Invoices you've sent, and whether they're paid. Payments match themselves." },
+  redeem: { label: "Redeem a code", hint: "Collect money sent as a code", group: "get", title: "Redeem a claim code", blurb: "Someone sent you a SettleSync claim code? Paste it here to move the money into this wallet." },
+  bills: { label: "Bills to pay", hint: "Invoices people sent you", group: "pay", title: "Bills to pay", blurb: "Invoices sent to this wallet, and pay-link invoices you've started paying. Pay with one tap." },
+  send: { label: "Send money", hint: "Pay anyone, no invoice needed", group: "pay", title: "Send money", blurb: "Pay someone who hasn't billed you yet: straight to their wallet, or as a claim code they redeem." },
+  history: { label: "History", hint: "Everything in and out", group: "rec", title: "Payment history", blurb: "Everything this wallet sent and received, labelled, with proof on Stellar." },
 };
-const GROUPS = { get: "Get paid", pay: "Pay others", rec: "Records" };
+const GROUPS = { get: "Money coming in", pay: "Money going out", rec: "Records" };
 
 function Workspace() {
   const { address, route, profile } = useApp();
@@ -203,7 +204,7 @@ function Workspace() {
   }, [payments, invoices, address, persist]);
 
   const matched = useMemo(() => matchPayments(invoices, payments), [invoices, payments]);
-  const bills = useMemo(() => billsFor(address, payments), [address, payments]);
+  const bills = useMemo(() => billsFor(address, payments, loadLinkBills(address)), [address, payments]);
 
   // Public names (published on Stellar) for everyone this wallet deals with.
   useEffect(() => {
@@ -317,7 +318,10 @@ function Workspace() {
               <p>{GROUPS[g]}</p>
               {Object.entries(SECTIONS).filter(([, s]) => s.group === g).map(([key, s]) => (
                 <a key={key} href={`#/dashboard/${key}`} className={`side-nav__item ${tab === key ? "is-on" : ""}`} aria-current={tab === key ? "page" : undefined}>
-                  {s.label}
+                  <span className="side-nav__text">
+                    <span>{s.label}</span>
+                    <small>{s.hint}</small>
+                  </span>
                   {key === "bills" && summary.billsOpen > 0 && <span className="tabs__badge">{summary.billsOpen}</span>}
                   {key === "invoices" && summary.overdue > 0 && <span className="tabs__badge tabs__badge--bad">{summary.overdue}</span>}
                 </a>

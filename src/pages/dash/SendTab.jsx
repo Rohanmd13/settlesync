@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useApp } from "../../lib/app";
-import { payDirect, createClaimCode, redeemClaimCode } from "../../lib/actions";
-import { readClaimCode, NETWORK } from "../../lib/stellar";
+import { createClaimCode, redeemClaimCode } from "../../lib/actions";
+import { readClaimCode, NETWORK, isValidAddress, getAccountInfo, estimateConversion } from "../../lib/stellar";
+import PayBox from "../../components/PayBox";
 import { loadCodes, saveCodes, claimLinkFor } from "../../lib/codes";
 import { formatAmount, relativeTime } from "../../lib/invoices";
 import { QrImage, useCopy, whatsappLink } from "../../components/bits";
@@ -32,7 +33,7 @@ export default function SendTab({ account, setNotice, onSent }) {
           ) : (
             <>
               <h3>Paying a wallet directly</h3>
-              <p className="small muted">Use this when you already know their Stellar address. Add a note like "Logo, October" and it travels with the payment, so both of you can see what it was for.</p>
+              <p className="small muted">Use this when you already know their Stellar address. Add a note like "Logo, October" and it travels with the payment, so both of you can see what it was for. Choose what they receive (USDC or XLM) and what you pay with: if you only hold XLM, Stellar converts it inside the payment and they still get the exact amount.</p>
             </>
           )}
         </aside>
@@ -109,39 +110,91 @@ function CodeForm({ account, setNotice, onSent }) {
 function DirectForm({ account, setNotice, onSent }) {
   const { address } = useApp();
   const [f, setF] = useState({ to: "", amount: "", assetCode: "USDC", note: "" });
-  const [busy, setBusy] = useState(false);
+  const [dest, setDest] = useState(null); // recipient's account info
+  const [estimate, setEstimate] = useState(null);
+  const [round, setRound] = useState(0); // resets the pay box after a payment
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const to = f.to.trim();
+  const amount = validAmount(f.amount);
+  const toOk = isValidAddress(to) && to !== address;
 
-  const submit = async (e) => {
-    e.preventDefault();
-    const amount = validAmount(f.amount);
-    if (!amount) return setNotice({ kind: "error", text: "Enter an amount greater than zero, with up to 7 decimals." });
-    if (f.assetCode === "USDC" && !account?.hasUsdcTrustline) return setNotice({ kind: "error", text: "This wallet doesn't hold USDC yet. Use Get test USDC above, or send XLM." });
-    setBusy(true);
-    try {
-      const res = await payDirect({ from: address, to: f.to, amount, assetCode: f.assetCode, note: f.note });
-      setNotice({ kind: "success", text: `Sent ${formatAmount(amount, f.assetCode)}. It arrives in about 5 seconds.`, });
-      setF({ to: "", amount: "", assetCode: f.assetCode, note: "" });
-      onSent(res);
-    } catch (err) {
-      setNotice({ kind: "error", text: err.message });
-    } finally {
-      setBusy(false);
-    }
+  useEffect(() => {
+    if (!toOk) return setDest(null);
+    let alive = true;
+    getAccountInfo(to).then((i) => alive && setDest(i)).catch(() => alive && setDest(null));
+    return () => { alive = false; };
+  }, [to, toOk]);
+
+  // How much of the chosen currency the wallet's spare XLM could become.
+  const spareXlm = Math.max(0, Number(account?.xlm || 0) - 2);
+  useEffect(() => {
+    setEstimate(null);
+    if (f.assetCode === "XLM" || spareXlm < 1) return;
+    let alive = true;
+    estimateConversion({ fromCode: "XLM", amount: spareXlm.toFixed(7), toCode: f.assetCode })
+      .then((v) => alive && setEstimate(v))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [f.assetCode, spareXlm]);
+
+  const destProblem = !toOk
+    ? (to && to === address ? "That's your own wallet." : "")
+    : dest && !dest.exists
+      ? `That wallet isn't active on Stellar ${NETWORK.label} yet. Send a claim code instead; it works for any wallet.`
+      : dest && f.assetCode === "USDC" && !dest.hasUsdcTrustline
+        ? "That wallet can't receive USDC yet. Send XLM instead (you can still pay with anything you hold), or a claim code."
+        : "";
+
+  const own = f.assetCode === "USDC" ? Number(account?.usdc || 0) : Number(account?.xlm || 0);
+  const paid = ({ amount: a, paidWith }) => {
+    setNotice({ kind: "success", text: `Sent ${formatAmount(a, f.assetCode)}${paidWith ? ` (paid with ${paidWith}, converted on Stellar)` : ""}. It arrives in about 5 seconds.` });
+    setF({ to: "", amount: "", assetCode: f.assetCode, note: "" });
+    setRound((r) => r + 1);
+    onSent();
   };
 
   return (
-    <form className="form" onSubmit={submit}>
+    <div className="form">
       <h2>Pay a wallet address</h2>
       <label className="field">Their Stellar address
         <input value={f.to} onChange={set("to")} placeholder="G…" spellCheck={false} required />
+        {to && !isValidAddress(to) && <small className="field__err">A Stellar address starts with G and is 56 characters long.</small>}
       </label>
-      <AmountFields f={f} set={set} />
+      <div className="form__row">
+        <label className="field">Amount they receive
+          <input value={f.amount} onChange={set("amount")} inputMode="decimal" placeholder="20" required />
+        </label>
+        <label className="field">In
+          <select value={f.assetCode} onChange={set("assetCode")}>
+            <option value="USDC">USDC</option>
+            <option value="XLM">XLM</option>
+          </select>
+        </label>
+      </div>
+      <p className="send__have small">
+        You have <b>{formatAmount(account?.usdc || 0, "USDC")}</b> and <b>{formatAmount(account?.xlm || 0, "XLM")}</b>.
+        {f.assetCode === "USDC" && estimate ? <> Your spare XLM could become about <b>{formatAmount(estimate.toFixed(2), "USDC")}</b> if you pay with XLM.</> : null}
+        {amount && own < Number(amount) ? <> Not enough {f.assetCode}? Pick another currency under <b>Pay with</b> and Stellar converts it as you pay.</> : null}
+      </p>
       <label className="field">What it's for <span className="muted">(optional, up to 28 characters)</span>
         <input value={f.note} onChange={set("note")} maxLength={28} placeholder="Logo, October" />
       </label>
-      <button className="btn btn--primary btn--lg" disabled={busy}>{busy ? "Approve in your wallet…" : "Send payment"}</button>
-    </form>
+      {destProblem && <p className="alert alert--warn">{destProblem}</p>}
+      {toOk && amount && dest?.exists && !destProblem ? (
+        <PayBox
+          key={round}
+          inv={{ direct: true, id: f.note.trim(), to, amount, assetCode: f.assetCode }}
+          remaining={amount}
+          payer={address}
+          payerInfo={account}
+          verb="Send"
+          blocked={!account?.exists}
+          onPaid={paid}
+        />
+      ) : (
+        <button className="btn btn--primary btn--lg" disabled>{!toOk ? "Enter their address" : !amount ? "Enter an amount" : "Checking their wallet…"}</button>
+      )}
+    </div>
   );
 }
 

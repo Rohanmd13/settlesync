@@ -68,6 +68,12 @@ function notes(ws, startRow, cols, lines) {
   });
 }
 
+// Today's date in the user's time zone, for file names.
+function fileDay() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
 async function download(wb, filename) {
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -150,13 +156,13 @@ export async function downloadLedgerXlsx(invoices, owner, profile = {}) {
     "This is a record for your CA or accountant, not tax advice. Every row links to its transaction on Stellar as proof.",
   ]);
   ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
-  await download(wb, `settlesync-ledger-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  await download(wb, `settlesync-ledger-${fileDay()}.xlsx`);
 }
 
 export async function downloadHistoryXlsx(payments, owner, fiat = "INR") {
   const fmtFiat = fiat === "INR" ? '"₹"#,##,##0.00' : `"${fiat} "#,##0.00`;
   const wb = await newBook();
-  const ws = wb.addWorksheet("History", { views: [{ state: "frozen", ySplit: 4, showGridLines: false }], properties: { tabColor: { argb: NAVY } } });
+  const ws = wb.addWorksheet("Payments", { views: [{ state: "frozen", ySplit: 4, showGridLines: false }], properties: { tabColor: { argb: NAVY } } });
   const headers = ["Date", "Direction", "What", "Amount", "Asset", `${fiat} value`, "Other wallet", "Memo", "Proof on Stellar"];
   ws.columns = [18, 11, 34, 12, 8, 14, 24, 18, 18].map((w) => ({ width: w }));
   titleBlock(ws, { title: "SettleSync · Payment history", subtitle: `Wallet ${owner}  ·  Exported ${new Date().toLocaleString("en-IN")}`, cols: headers.length });
@@ -182,5 +188,5 @@ export async function downloadHistoryXlsx(payments, owner, fiat = "INR") {
   styleBody(ws, 5, r - 1, headers.length);
   ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(4, r - 1), column: headers.length } };
   notes(ws, r + 1, headers.length, ["Values use CoinGecko's daily rate for each payment date. A record, not tax advice."]);
-  await download(wb, `settlesync-history-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  await download(wb, `settlesync-history-${fileDay()}.xlsx`);
 }

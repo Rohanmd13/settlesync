@@ -1252,3 +1252,12 @@ input[type="date"] { cursor: pointer; }
 .roadmap__tag--exploring { background: var(--bg-2); color: var(--ink-2); }
 @media (max-width: 900px) { .roadmap { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 600px) { .roadmap { grid-template-columns: 1fr; } }
+.paybox__last { color: var(--paid); font-weight: 600; margin: 0; }
+/* v8: sidebar items with a one-line hint */
+.side-nav__text { display: grid; gap: 1px; min-width: 0; }
+.side-nav__text small { font-size: .74rem; font-weight: 500; color: var(--ink-3); line-height: 1.25; }
+.side-nav__item.is-on .side-nav__text small { color: var(--ink-2); }
+.side-nav__group p { text-transform: uppercase; letter-spacing: .05em; font-size: .7rem; }
+@media (max-width: 1100px) { .side-nav__text small { display: none; } }
+.field__err { color: var(--error); }
+.send__have { background: var(--surface-2); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 10px; margin: 0; color: var(--ink-2); line-height: 1.5; }

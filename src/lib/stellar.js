@@ -197,7 +197,33 @@ export async function buildInvoicePayment({ from, to, amount, assetCode, invoice
         path: via.path || [],
       })
     : Operation.payment({ destination: to, asset: assetFor(assetCode), amount: String(amount) });
-  return tb.addOperation(op).addMemo(Memo.text(invoiceId)).setTimeout(180).build().toXDR();
+  tb.addOperation(op);
+  if (invoiceId) tb.addMemo(Memo.text(clipBytes(invoiceId, 28)));
+  return tb.setTimeout(180).build().toXDR();
+}
+
+// ---------- just-sent payments ----------
+// Horizon can take a few seconds to list a payment. Payments this browser just
+// made are remembered for a while and merged into every payment list, so an
+// invoice's "left to pay" updates instantly and can't be paid twice by mistake.
+const PENDING_KEY = "settlesync:pending";
+const PENDING_TTL = 15 * 60 * 1000;
+function readPending() {
+  try {
+    const list = JSON.parse(localStorage.getItem(PENDING_KEY) || "[]");
+    return list.filter((p) => Date.now() - Date.parse(p.createdAt) < PENDING_TTL);
+  } catch {
+    return [];
+  }
+}
+export function rememberPending(rec) {
+  try {
+    const list = readPending().filter((p) => p.hash !== rec.hash);
+    list.push({ ...rec, net: NETWORK.id, createdAt: new Date().toISOString() });
+    localStorage.setItem(PENDING_KEY, JSON.stringify(list.slice(-50)));
+  } catch {
+    /* storage blocked: the page still updates from its own state */
+  }
 }
 
 export function assetKey(code, issuer) {
@@ -215,6 +241,13 @@ function fromHorizonAsset(a) {
 // What it would cost the payer, in each other asset they hold, for the receiver
 // to get exactly `amount` of `assetCode`. Uses Stellar's built-in exchange.
 // Returns [{ key, code, issuer, sourceAmount, sendMax, path }], cheapest route per asset.
+// Roughly how much `toCode` you'd get for `amount` of `fromCode` on Stellar's exchange right now.
+export async function estimateConversion({ fromCode, amount, toCode }) {
+  const res = await horizon.strictSendPaths(assetFor(fromCode), String(amount), [assetFor(toCode)]).call();
+  const best = Math.max(0, ...res.records.map((r) => Number(r.destination_amount)));
+  return best > 0 ? best : null;
+}
+
 export const CONVERSION_BUFFER = 0.01; // 1% for price moves between quote and payment
 export async function quoteConversions({ payer, assetCode, amount }) {
   const res = await horizon.strictReceivePaths(payer, assetFor(assetCode), String(amount)).call();
@@ -294,7 +327,7 @@ export async function getAccountPayments(address, limit = 200) {
     .limit(limit)
     .join("transactions")
     .call();
-  return page.records
+  const fetched = page.records
     .filter((r) => r.type === "payment" || r.type === "create_account" || (r.type.startsWith("path_payment") && r.from !== r.to))
     .map((r) => {
       const isCreate = r.type === "create_account";
@@ -318,6 +351,24 @@ export async function getAccountPayments(address, limit = 200) {
         paidWith: isPath && srcCode !== destCode ? { amount: r.source_amount, assetCode: srcCode } : null,
       };
     });
+  const seen = new Set(fetched.map((p) => p.hash));
+  const extra = readPending()
+    .filter((p) => p.net === NETWORK.id && !seen.has(p.hash) && (p.from === address || p.to === address))
+    .map((p) => ({
+      id: `pending-${p.hash}`,
+      hash: p.hash,
+      from: p.from,
+      to: p.to,
+      direction: p.to === address ? "in" : "out",
+      type: "payment",
+      amount: String(p.amount),
+      assetCode: p.assetCode,
+      memo: p.memo || null,
+      createdAt: p.createdAt,
+      paidWith: p.paidWith || null,
+      pending: true,
+    }));
+  return [...extra, ...fetched];
 }
 
 export async function getIncomingPayments(address, limit = 200) {

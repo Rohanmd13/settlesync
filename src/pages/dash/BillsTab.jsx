@@ -50,7 +50,7 @@ export default function BillsTab({ bills, names, account, setNotice, onPaid }) {
         <button className={`ledger__row ${b.key === selectedKey ? "is-selected" : ""}`} onClick={() => setSelectedKey(b.key)}>
           <span className="ledger__client">
             <strong>{names[b.to] || shortAddr(b.to)}</strong>
-            <small>{b.id} · requested {relativeTime(b.requestedAt)}</small>
+            <small>{b.id} · {b.viaLink ? "from a pay link" : `requested ${relativeTime(b.requestedAt)}`}{b.received > 0 && b.received + 1e-7 < Number(b.amount) ? ` · ${formatAmount(Number(b.amount) - b.received, b.assetCode)} left` : ""}</small>
           </span>
           <span className="ledger__amt">{formatAmount(b.amount, b.assetCode)}</span>
           <span className={`pill pill--${s}`}>{s === "pending" ? "To pay" : STATUS_LABEL[s]}</span>
@@ -85,7 +85,7 @@ function BillDetail({ bill, name, account, setNotice, onPaid }) {
   const status = statusOf(bill);
   const remaining = remainingOf(bill);
 
-  const sheet = { ...bill, fromName: name || "Requester", client: "You", description: "Payment request sent to your wallet", createdAt: bill.requestedAt };
+  const sheet = { ...bill, fromName: name || bill.fromName || "Requester", client: "You", description: bill.description || (bill.viaLink ? "Invoice paid from a pay link" : "Payment request sent to your wallet"), createdAt: bill.requestedAt };
 
   const paid = ({ amount, paidWith }) => {
     const full = (bill.received || 0) + amount + 1e-7 >= Number(bill.amount);
@@ -99,11 +99,11 @@ function BillDetail({ bill, name, account, setNotice, onPaid }) {
       <InvoiceSheet inv={sheet} status={stampKey ? "paid" : status} stampKey={stampKey} />
       {status !== "paid" && !stampKey ? (
         <div className="card">
-          <p className="card__title">Pay {name || shortAddr(bill.to)}</p>
+          <p className="card__title">{bill.received > 0 ? "Left to pay" : `Pay ${name || bill.fromName || shortAddr(bill.to)}`}</p>
           <p className="pay__amount">{formatAmount(remaining, bill.assetCode)}</p>
           {bill.received > 0 && <p className="small">Already paid {formatAmount(bill.received, bill.assetCode)} of {formatAmount(bill.amount, bill.assetCode)}.</p>}
           <p className="small muted">From {shortAddr(bill.to)}{name ? "" : " (no name published)"}. Settles in about 5 seconds.</p>
-          <PayBox inv={bill} remaining={remaining} payer={address} payerInfo={account} payeeName={name} blocked={!account?.exists} onPaid={paid} />
+          <PayBox inv={bill} remaining={remaining} payer={address} payerInfo={account} payeeName={name || bill.fromName} blocked={!account?.exists} onPaid={paid} onStale={onPaid} />
         </div>
       ) : (
         <div className="card">
@@ -116,9 +116,13 @@ function BillDetail({ bill, name, account, setNotice, onPaid }) {
           ))}
         </div>
       )}
-      <p className="small muted">
-        Request received {formatDate(bill.requestedAt)}. <a href={NETWORK.explorerTx(bill.requestHash)} target="_blank" rel="noreferrer">See it on Stellar</a>
-      </p>
+      {bill.viaLink ? (
+        <p className="small muted">Saved here when you paid part of it from a pay link, so you can finish paying without the link.</p>
+      ) : (
+        <p className="small muted">
+          Request received {formatDate(bill.requestedAt)}. <a href={NETWORK.explorerTx(bill.requestHash)} target="_blank" rel="noreferrer">See it on Stellar</a>
+        </p>
+      )}
     </div>
   );
 }

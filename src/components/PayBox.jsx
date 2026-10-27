@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { formatAmount, partAmountError } from "../lib/invoices";
-import { quoteConversions, assetKey, USDC_ISSUER, CONVERSION_BUFFER } from "../lib/stellar";
+import { formatAmount, partAmountError, matchPayments, remainingOf } from "../lib/invoices";
+import { quoteConversions, assetKey, USDC_ISSUER, CONVERSION_BUFFER, getIncomingPayments } from "../lib/stellar";
 import { payInvoice } from "../lib/actions";
 
 const trim7 = (n) => Number(n).toFixed(7).replace(/\.?0+$/, "");
@@ -8,7 +8,8 @@ const trim7 = (n) => Number(n).toFixed(7).replace(/\.?0+$/, "");
 // The paying side of an invoice or bill: how much (when part payments are allowed)
 // and what to pay with (the invoice's own currency, or any other asset in the
 // payer's wallet that Stellar can convert on the way).
-export default function PayBox({ inv, remaining, payer, payerInfo, payeeName, blocked, onPaid, onError }) {
+// `inv.direct` = a plain payment to a wallet (Send money), not an invoice: no remaining-amount check.
+export default function PayBox({ inv, remaining, payer, payerInfo, payeeName, blocked, onPaid, onError, onStale, verb = "Pay" }) {
   const [amount, setAmount] = useState(remaining);
   const [payWith, setPayWith] = useState(null); // asset key; null = invoice's own asset
   const [quotes, setQuotes] = useState(null); // null = loading, [] = none
@@ -72,7 +73,28 @@ export default function PayBox({ inv, remaining, payer, payerInfo, payeeName, bl
     if (!chosen.enough) return setErr(`Not enough ${chosen.code} in your wallet for this payment.`);
     setBusy(true);
     try {
-      const via = converting ? { code: chosen.code, issuer: chosen.issuer, sendMax: chosen.sendMax, path: chosen.path } : undefined;
+      // Re-check what's left on Stellar right before paying, so an invoice can't be
+      // paid twice (another tab, another device, or a page that hadn't refreshed yet).
+      if (!inv.direct) {
+        let fresh = null;
+        try {
+          fresh = matchPayments([inv], await getIncomingPayments(inv.to))[0];
+        } catch {
+          /* network hiccup: fall back to what the page shows */
+        }
+        if (fresh) {
+          const left = Number(remainingOf(fresh));
+          if (left <= 1e-7) {
+            onStale?.(fresh);
+            throw new Error("This invoice has already been paid in full. Nothing more to pay.");
+          }
+          if (Number(amt) > left + 1e-7) {
+            onStale?.(fresh);
+            throw new Error(`Some of this was paid in the meantime. Only ${formatAmount(left, inv.assetCode)} is left, so the amount has been updated. Check it and pay again.`);
+          }
+        }
+      }
+      const via = converting ? { code: chosen.code, issuer: chosen.issuer, sendMax: chosen.sendMax, sourceAmount: chosen.sourceAmount, path: chosen.path } : undefined;
       const res = await payInvoice({ payer, to: inv.to, amount: amt, assetCode: inv.assetCode, invoiceId: inv.id, via });
       onPaid?.({ amount: Number(amt), hash: res.hash, paidWith: converting ? chosen.code : null });
     } catch (e) {
@@ -86,7 +108,7 @@ export default function PayBox({ inv, remaining, payer, payerInfo, payeeName, bl
   const label = (o) => (o.code === "USDC" || o.code === "XLM" ? o.code : `${o.code} (${o.issuer?.slice(0, 4)}…)`);
   const payLabel = busy
     ? "Approve in your wallet…"
-    : `Pay ${formatAmount(amt || 0, inv.assetCode)}${converting ? ` with ${chosen.code}` : ""}`;
+    : `${verb} ${formatAmount(amt || 0, inv.assetCode)}${converting ? ` with ${chosen.code}` : ""}`;
 
   return (
     <div className="paybox">
@@ -108,6 +130,9 @@ export default function PayBox({ inv, remaining, payer, payerInfo, payeeName, bl
               <button type="button" className="chip" onClick={() => setAmount(trim7(inv.minPart))}>Minimum {trim7(inv.minPart)}</button>
             )}
           </div>
+          {Number(inv.minPart) > Number(remaining) && (
+            <p className="small paybox__last">Only {formatAmount(remaining, inv.assetCode)} is left. That's below the {formatAmount(inv.minPart, inv.assetCode)} minimum, which is fine: the last payment can be smaller.</p>
+          )}
           <p className="small muted">
             {payeeName || "The sender"} accepts part payments{Number(inv.minPart) > 0 ? ` of at least ${formatAmount(inv.minPart, inv.assetCode)}` : ""}. Pay the rest later with this same link.
           </p>

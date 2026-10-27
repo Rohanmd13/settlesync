@@ -14,13 +14,24 @@ import {
   buildProPayment,
   buildTestUsdcSwap,
   NETWORK,
+  rememberPending,
 } from "./stellar";
 import { signWithWallet } from "./wallet";
 
 export async function payInvoice({ payer, to, amount, assetCode, invoiceId, via }) {
   const xdr = await buildInvoicePayment({ from: payer, to, amount, assetCode, invoiceId, via });
   const signed = await signWithWallet(xdr, payer);
-  return submitSigned(signed);
+  const res = await submitSigned(signed);
+  rememberPending({
+    hash: res.hash,
+    from: payer,
+    to,
+    amount,
+    assetCode,
+    memo: invoiceId || null,
+    paidWith: via ? { amount: via.sourceAmount || via.sendMax, assetCode: via.code } : null,
+  });
+  return res;
 }
 
 export async function sendPaymentRequest({ from, clientAddress, invoice, publicName }) {

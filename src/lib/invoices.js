@@ -124,8 +124,30 @@ export function matchPayments(invoices, payments) {
   });
 }
 
-// Bills: payment requests other wallets sent to `me`, with what I've paid against each.
-export function billsFor(me, payments) {
+// Pay-link invoices this wallet has paid towards, so a part-paid invoice stays in
+// the payer's Bills to pay until it's finished (no need to find the link again).
+const LINK_BILLS = (addr) => `settlesync:linkbills:${NETWORK.id}:${addr}`;
+export function loadLinkBills(addr) {
+  try {
+    return JSON.parse(localStorage.getItem(LINK_BILLS(addr)) || "[]");
+  } catch {
+    return [];
+  }
+}
+export function rememberLinkBill(addr, inv) {
+  try {
+    const keep = Object.fromEntries(PUBLIC_FIELDS.filter((k) => inv[k]).map((k) => [k, inv[k]]));
+    const list = loadLinkBills(addr).filter((b) => !(b.id === inv.id && b.to === inv.to));
+    list.unshift({ ...keep, savedAt: new Date().toISOString() });
+    localStorage.setItem(LINK_BILLS(addr), JSON.stringify(list.slice(0, 200)));
+  } catch {
+    /* storage blocked */
+  }
+}
+
+// Bills: payment requests other wallets sent to `me` (plus pay-link invoices `me` has
+// paid towards), with what I've paid against each.
+export function billsFor(me, payments, linkBills = []) {
   const bills = new Map();
   for (const p of payments) {
     if (p.direction !== "in" || p.from === me) continue;
@@ -145,6 +167,24 @@ export function billsFor(me, payments) {
         requestHash: p.hash,
       });
     }
+  }
+  for (const inv of linkBills) {
+    const key = `${inv.to}:${inv.id}`;
+    if (inv.to === me || bills.has(key)) continue;
+    bills.set(key, {
+      key,
+      id: inv.id,
+      to: inv.to,
+      amount: inv.amount,
+      assetCode: inv.assetCode,
+      part: !!inv.part,
+      minPart: inv.minPart || "",
+      requestedAt: inv.createdAt || inv.savedAt,
+      fromName: inv.fromName,
+      description: inv.description,
+      dueDate: inv.dueDate,
+      viaLink: true,
+    });
   }
   return [...bills.values()]
     .map((b) => {
