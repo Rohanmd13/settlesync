@@ -62,11 +62,11 @@ export default function Header() {
   };
 
   // On the home page, underline the nav item for the section in view.
-  const onLanding = ["/", "/why", "/how", "/who", "/stellar", "/faq"].includes(route);
+  const onLanding = ["/", "/why", "/how", "/who", "/stellar", "/next", "/faq"].includes(route);
   const [spy, setSpy] = useState("/");
   useEffect(() => {
     if (!onLanding) return;
-    const ORDER = [["how", "/how"], ["why", "/why"], ["who", "/why"], ["stellar", "/why"], ["faq", "/faq"]];
+    const ORDER = [["how", "/how"], ["why", "/why"], ["who", "/why"], ["stellar", "/why"], ["next", "/why"], ["faq", "/faq"]];
     let raf = 0;
     const update = () => {
       raf = 0;
@@ -213,7 +213,9 @@ export default function Header() {
           <a href="#/why">Why SettleSync</a>
           <a href="#/how">How it works</a>
           <a href="#/stellar">Under the hood</a>
+          <a href="#/next">What's next</a>
           <a href="#/plans">Plans</a>
+          <a href="#/next">What's next</a>
           <a href="#/faq">Questions</a>
         </nav>
 
@@ -255,6 +257,7 @@ export function Footer() {
           <a href="#/how">How it works</a>
           <a href="#/dashboard">Dashboard</a>
           <a href="#/plans">Plans</a>
+          <a href="#/next">What's next</a>
           <a href="#/faq">Questions</a>
           <a href={REPO} target="_blank" rel="noreferrer">GitHub</a>
           <a href="https://stellar.org" target="_blank" rel="noreferrer">Built on Stellar</a>

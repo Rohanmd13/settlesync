@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../../lib/app";
 import { describePayment } from "../../lib/csv";
 import { downloadHistoryXlsx } from "../../lib/xlsx";
-import { formatAmount, relativeTime, formatDate } from "../../lib/invoices";
+import { formatAmount, relativeTime, formatDate, localDay } from "../../lib/invoices";
 import { NETWORK, shortAddr } from "../../lib/stellar";
 import { DownloadIcon } from "../../components/Icons";
 import { liveRates, formatFiat } from "../../lib/inr";
@@ -25,8 +25,8 @@ export default function HistoryTab({ payments, names }) {
   const { address, profile } = useApp();
   const [filter, setFilter] = useState("settlesync");
   const [period, setPeriod] = useState("month");
-  const [from, setFrom] = useState(() => new Date().toISOString().slice(0, 10));
-  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [from, setFrom] = useState(() => localDay());
+  const [to, setTo] = useState(() => localDay());
   const [exporting, setExporting] = useState(false);
   const [rates, setRates] = useState(null);
   const fiat = profile.currency || "INR";
@@ -151,7 +151,7 @@ export default function HistoryTab({ payments, names }) {
                       <span className="history__dir" aria-hidden="true">{p.direction === "in" ? "↓" : "↑"}</span>
                       <span className="history__what">
                         <b>{p.what.label}</b>
-                        <small>{p.direction === "in" ? "from" : "to"} {names[who] || shortAddr(who)} · {relativeTime(p.createdAt)}</small>
+                        <small>{p.direction === "in" ? "from" : "to"} {names[who] || shortAddr(who)} · {relativeTime(p.createdAt)}{p.paidWith ? ` · ${p.direction === "in" ? "they paid" : "you paid"} ${formatAmount(p.paidWith.amount, p.paidWith.assetCode)}, converted` : ""}</small>
                       </span>
                       <span className="history__amt">{p.what.kind === "request" ? "request" : p.what.kind === "code" ? "locked in code" : `${sign}${formatAmount(p.amount, p.assetCode)}`}</span>
                       <a className="history__link" href={NETWORK.explorerTx(p.hash)} target="_blank" rel="noreferrer" aria-label="View transaction on Stellar">View</a>

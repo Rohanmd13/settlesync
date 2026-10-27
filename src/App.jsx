@@ -11,7 +11,7 @@ import Admin from "./pages/Admin";
 import Intro from "./components/Intro";
 import EdgeGlow from "./components/EdgeGlow";
 
-const LANDING_ROUTES = ["/", "/why", "/how", "/who", "/stellar", "/faq"];
+const LANDING_ROUTES = ["/", "/why", "/how", "/who", "/stellar", "/next", "/faq"];
 
 function Routes() {
   const { route, network } = useApp();

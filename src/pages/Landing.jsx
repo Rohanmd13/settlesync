@@ -4,7 +4,7 @@ import InkField from "../components/InkField";
 import { Reveal, LivePill } from "../components/bits";
 import { useApp, go, ROLES } from "../lib/app";
 
-const SECTION_FOR_ROUTE = { "/why": "why", "/how": "how", "/who": "who", "/stellar": "stellar", "/faq": "faq" };
+const SECTION_FOR_ROUTE = { "/why": "why", "/how": "how", "/who": "who", "/stellar": "stellar", "/next": "next", "/faq": "faq" };
 
 export default function Landing() {
   const { route, address } = useApp();
@@ -162,9 +162,24 @@ export default function Landing() {
             <div><dt>Claim codes</dt><dd>A client can pay before any invoice exists. The money is locked in a one-time Stellar account; the code unlocks it into the freelancer's wallet, and the deposit returns to the client.</dd></div>
             <div><dt>USDC</dt><dd>Circle's dollar stablecoin, native on Stellar. One click in SettleSync lets your wallet accept it.</dd></div>
             <div><dt>Any wallet</dt><dd>Stellar Wallets Kit connects Freighter, xBull, Albedo, LOBSTR, Hana, Rabet and more. Signing always happens inside your wallet.</dd></div>
+            <div><dt>Built-in exchange</dt><dd>Paying in another currency uses a Stellar path payment: the client's XLM or USDC is converted on Stellar's own exchange inside the same transaction, and the freelancer receives exactly the invoiced amount.</dd></div>
             <div><dt>Your name, on your account</dt><dd>When you send a request, your display name is saved on your own Stellar account, so clients see who is asking.</dd></div>
           </dl>
         </div>
+      </section>
+
+      <section className="section" id="next">
+        <h2>What's next</h2>
+        <p className="section__lede">SettleSync is in its pilot. If it proves useful to freelancers and the people who pay them, this is what we build next.</p>
+        <ol className="roadmap">
+          {ROADMAP.map((r, i) => (
+            <Reveal key={r.title} as="li" delay={i * 60} className="roadmap__item">
+              <span className={`roadmap__tag roadmap__tag--${r.tag.toLowerCase()}`}>{r.tag}</span>
+              <h3>{r.title}</h3>
+              <p>{r.body}</p>
+            </Reveal>
+          ))}
+        </ol>
       </section>
 
       <section className="section" id="faq">
@@ -209,8 +224,8 @@ const USPS = [
   { icon: "⇄", title: "Three ways to get paid", body: "A pay link for new clients, a request straight to a regular client's wallet, or a claim code when the client wants to pay before you've even billed." },
   { icon: "₹", title: "Ready for your CA", body: "One Excel file with every payment, its rupee value on the day it arrived, and a link to the transaction as proof. Or pick USD, EUR, AED and more." },
   { icon: "◎", title: "We never hold your money", body: "Money goes wallet to wallet on Stellar. No account freezes, no payout delays, no percentage taken from what you earn." },
-  { icon: "⚡", title: "Seconds, for a fraction of a rupee", body: "A Stellar payment settles in about 5 seconds and costs less than ₹0.01, so a 50 USDC invoice isn't eaten by fees." },
-  { icon: "✦", title: "Any wallet, no account", body: "Freighter, xBull, Albedo, LOBSTR and more. Your client doesn't need to sign up for anything to pay you." },
+  { icon: "½", title: "Paid in parts, tracked for you", body: "Turn on part payments and your client can pay an advance now and the rest on delivery, from the same link. Set a minimum per payment; every part lands on the right invoice." },
+  { icon: "¤", title: "They pay in any currency", body: "Your client can pay a USDC invoice with XLM, or the other way round. Stellar converts it inside the payment, so you receive exactly what you billed, in seconds, for under ₹0.01." },
 ];
 
 // [label, SettleSync, wallet, bank/PayPal, marketplace]  first char: y / n / p(partial)
@@ -219,8 +234,19 @@ const COMPARE = [
   ["Time to settle", "y ~5 seconds", "y Seconds", "n 1–5 days", "n Days, after release"],
   ["Cost to get paid", "y < ₹0.01 network fee", "y Network fee", "n 3–5% plus FX spread", "n 10–20% commission"],
   ["Client can pay before an invoice", "y Claim codes", "p Only if they have your address", "p Yes", "n No"],
+  ["Pay in parts, tracked automatically", "y With a minimum you set", "n You track it by hand", "p Possible, tracked by hand", "p Milestones on some"],
+  ["Client pays in a different currency", "y Converted inside the payment", "n Only the asset you accept", "p Yes, with 3–5% FX costs", "p Card or bank only"],
   ["Accountant export with local currency", "y One click", "n No", "p Statements, no invoice link", "p Platform reports"],
   ["Who holds the money", "y You, always", "y You", "n The bank or PayPal", "n The platform, until release"],
+];
+
+const ROADMAP = [
+  { tag: "Next", title: "Milestone escrow", body: "For bigger projects: the client locks the full amount in a Soroban smart contract, and each milestone's share is released when it's approved. Neither side has to trust the other." },
+  { tag: "Next", title: "Split payouts for teams", body: "One invoice, paid once, shared out automatically, say 60% to the designer and 40% to the developer, in the same Stellar transaction. Built for agencies and DAO contributors." },
+  { tag: "Planned", title: "Retainers", body: "Monthly invoices that create and send themselves, with gentle reminders, for clients you work with every month." },
+  { tag: "Planned", title: "Cash out to your bank", body: "Turn USDC into rupees or your local currency through regulated Stellar anchors, straight from SettleSync." },
+  { tag: "Planned", title: "Invoices on every device", body: "Your invoices synced and encrypted, so the same records are there on your phone and your laptop." },
+  { tag: "Exploring", title: "More currencies to bill in", body: "Invoices in EURC and other stablecoins on Stellar, with the same automatic matching and exports." },
 ];
 
 const CODE_STEPS = [
@@ -239,5 +265,6 @@ const FAQ = [
   { q: "Is this real money?", a: "It can be either. SettleSync follows your wallet: on Stellar Main Net it moves real USDC and XLM; on Testnet it uses free test money, which is the best way to try it. You can see which one you're on next to your name at the top." },
   { q: "What does the accountant export contain?", a: "One row per payment: invoice number, client, date, amount, the rate in your currency on that day from CoinGecko, the converted value, and a link to the transaction as proof. It's a record for your CA or accountant, not tax advice." },
   { q: "Where are my invoices stored?", a: "In your browser, tied to your wallet. Invoices you send as wallet requests are also recorded on Stellar and come back automatically on a new device. You can download a backup any time from your profile." },
-  { q: "What if a client pays only part of the invoice?", a: "SettleSync adds up every payment with that invoice number. The invoice shows 'Part paid' with the amount received until the rest arrives." },
+  { q: "Can my client pay in parts?", a: "Yes. When you create an invoice, turn on 'Allow part payments' and optionally set a minimum per payment. Your client chooses how much to pay each time from the same link or from Bills to pay. SettleSync adds up every part, shows 'Part paid' with what's left, and stamps the invoice paid when the last part arrives. The last part can be smaller than the minimum so the invoice can always be finished." },
+  { q: "Can my client pay in a different currency?", a: "Yes. If you bill in USDC and your client only holds XLM (or the other way round), they pick 'Pay with XLM' on the pay page. Stellar converts it on its built-in exchange inside the same payment, so you receive exactly the amount on the invoice. The client sees the price first, and never pays more than 1% above it." },
 ];

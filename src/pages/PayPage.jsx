@@ -5,7 +5,7 @@ import { PrintIcon, WalletIcon, BackIcon } from "../components/Icons";
 import { useApp, go } from "../lib/app";
 import { decodePayLink, matchPayments, statusOf, formatAmount, remainingOf } from "../lib/invoices";
 import { NETWORK, getAccountInfo, getIncomingPayments, shortAddr, sep7PayUri } from "../lib/stellar";
-import { payInvoice } from "../lib/actions";
+import PayBox from "../components/PayBox";
 
 export default function PayPage({ token }) {
   const { address: payer, connect, network, walletNetwork, switchNetwork } = useApp();
@@ -20,7 +20,6 @@ export default function PayPage({ token }) {
   const [state, setState] = useState(null);
   const [payerInfo, setPayerInfo] = useState(null);
   const [receiverOk, setReceiverOk] = useState(null);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const [stampKey, setStampKey] = useState(null);
@@ -57,9 +56,6 @@ export default function PayPage({ token }) {
   const status = statusOf(view);
   const remaining = remainingOf(view);
   const isSelf = payer && payer === invoice.to;
-  const balance = payerInfo ? (invoice.assetCode === "XLM" ? Number(payerInfo.xlm) : Number(payerInfo.usdc ?? 0)) : null;
-  const lacksTrust = invoice.assetCode === "USDC" && payerInfo?.exists && !payerInfo.hasUsdcTrustline;
-  const tooLow = balance !== null && balance < Number(remaining);
 
   const onConnect = async () => {
     setError("");
@@ -70,19 +66,12 @@ export default function PayPage({ token }) {
     }
   };
 
-  const pay = async () => {
-    setError("");
-    setBusy(true);
-    try {
-      const res = await payInvoice({ payer, to: invoice.to, amount: remaining, assetCode: invoice.assetCode, invoiceId: invoice.id });
-      setResult({ hash: res.hash });
-      setState({ ...view, received: (view.received || 0) + Number(remaining), paidAt: new Date().toISOString() });
-      setStampKey(Date.now());
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
+  const onPaid = ({ amount, hash, paidWith }) => {
+    const received = (view.received || 0) + amount;
+    const full = received + 1e-7 >= Number(invoice.amount);
+    setResult({ hash, amount, paidWith, full });
+    setState({ ...view, received, paidAt: full ? new Date().toISOString() : null });
+    if (full) setStampKey(Date.now());
   };
 
   const lastHash = result?.hash || view.payments?.[view.payments.length - 1]?.hash;
@@ -116,7 +105,13 @@ export default function PayPage({ token }) {
             </div>
           ) : (
             <div className="pay__box">
-              <p className="pay__eyebrow">Pay {invoice.fromName || "this invoice"}</p>
+              {result && !result.full && (
+                <p className="alert alert--success">
+                  Paid {formatAmount(result.amount, invoice.assetCode)}{result.paidWith ? ` (with ${result.paidWith})` : ""}. {invoice.fromName || "They"} will see it on the invoice automatically.{" "}
+                  <a href={NETWORK.explorerTx(result.hash)} target="_blank" rel="noreferrer">View transaction</a>
+                </p>
+              )}
+              <p className="pay__eyebrow">{view.received > 0 ? "Left to pay" : `Pay ${invoice.fromName || "this invoice"}`}</p>
               <p className="pay__amount">{formatAmount(remaining, invoice.assetCode)}</p>
               {view.received > 0 && <p className="small">Already received {formatAmount(view.received, invoice.assetCode)} of {formatAmount(invoice.amount, invoice.assetCode)}.</p>}
               <p className="small muted">Sent straight to {shortAddr(invoice.to)} on Stellar. Settles in about 5 seconds; the fee is a fraction of a rupee.</p>
@@ -138,15 +133,17 @@ export default function PayPage({ token }) {
                 <p className="alert alert--warn">You're connected with the wallet this invoice pays into. Switch to the paying wallet to continue.</p>
               ) : (
                 <>
-                  <p className="small">Paying from <b>{shortAddr(payer)}</b>{balance !== null && <>, balance {formatAmount(balance, invoice.assetCode)}</>}</p>
+                  <p className="small">Paying from <b>{shortAddr(payer)}</b></p>
                   {payerInfo && !payerInfo.exists && <p className="alert alert--warn">Your wallet isn't active on Stellar yet. It needs a little XLM first.</p>}
-                  {lacksTrust && (
-                    <p className="alert alert--warn">Your wallet doesn't hold USDC yet. Enable USDC in your SettleSync dashboard and add some first.</p>
-                  )}
-                  {!lacksTrust && tooLow && payerInfo?.exists && <p className="alert alert--warn">Your balance is lower than the amount due.</p>}
-                  <button className="btn btn--primary btn--wide btn--lg" onClick={pay} disabled={busy || lacksTrust || receiverOk === false || (payerInfo && !payerInfo.exists) || walletMismatch}>
-                    {busy ? "Approve in your wallet…" : `Pay ${formatAmount(remaining, invoice.assetCode)}`}
-                  </button>
+                  <PayBox
+                    inv={invoice}
+                    remaining={remaining}
+                    payer={payer}
+                    payerInfo={payerInfo}
+                    payeeName={invoice.fromName}
+                    blocked={receiverOk === false || (payerInfo && !payerInfo.exists) || walletMismatch}
+                    onPaid={onPaid}
+                  />
                 </>
               )}
               {error && <p className="alert alert--error">{error}</p>}

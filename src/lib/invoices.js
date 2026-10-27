@@ -60,6 +60,8 @@ export function mergeRequestedFromChain(list, payments, owner) {
       dueDate: "",
       requestedTo: p.to,
       requestedAt: p.createdAt,
+      part: req.part,
+      minPart: req.minPart,
       restored: true,
     });
     changed = true;
@@ -69,7 +71,7 @@ export function mergeRequestedFromChain(list, payments, owner) {
 }
 
 // ---------- pay links ----------
-const PUBLIC_FIELDS = ["id", "to", "fromName", "gstin", "client", "description", "amount", "assetCode", "dueDate", "createdAt", "net"];
+const PUBLIC_FIELDS = ["id", "to", "fromName", "gstin", "client", "description", "amount", "assetCode", "dueDate", "createdAt", "net", "part", "minPart"];
 
 function toBase64Url(str) {
   const bytes = new TextEncoder().encode(str);
@@ -137,6 +139,8 @@ export function billsFor(me, payments) {
         to: p.from,
         amount: req.amount,
         assetCode: req.assetCode,
+        part: req.part,
+        minPart: req.minPart,
         requestedAt: p.createdAt,
         requestHash: p.hash,
       });
@@ -159,10 +163,15 @@ export function billsFor(me, payments) {
     .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
 }
 
+// Today's date in the user's own time zone (not UTC), as YYYY-MM-DD.
+export function localDay(d = new Date()) {
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
 export function statusOf(inv) {
   if (inv.paidAt) return "paid";
   if (inv.received > 0) return "partial";
-  if (inv.dueDate && inv.dueDate < new Date().toISOString().slice(0, 10)) return "overdue";
+  if (inv.dueDate && inv.dueDate < localDay()) return "overdue";
   return "pending";
 }
 
@@ -176,6 +185,18 @@ export const STATUS_LABEL = {
 export function invoicesThisMonth(list) {
   const ym = new Date().toISOString().slice(0, 7);
   return list.filter((i) => !i.restored && (i.createdAt || "").startsWith(ym)).length;
+}
+
+// Part payments: is `amount` an acceptable payment towards this invoice right now?
+// Returns an error message, or "" when it's fine. The final payment may be below the minimum.
+export function partAmountError(inv, amount) {
+  const rem = Number(remainingOf(inv));
+  const n = Number(amount);
+  if (!/^\d+(\.\d{1,7})?$/.test(String(amount).trim()) || !(n > 0)) return "Enter an amount greater than zero, with up to 7 decimals.";
+  if (n > rem + 1e-7) return `That's more than what's left (${formatAmount(rem, inv.assetCode)}).`;
+  const min = Number(inv.minPart || 0);
+  if (min > 0 && n + 1e-7 < Math.min(min, rem)) return `The minimum for each payment is ${formatAmount(min, inv.assetCode)}.`;
+  return "";
 }
 
 export function remainingOf(inv) {

@@ -114,6 +114,8 @@ export async function checkNetwork() {
 }
 
 export async function signWithWallet(xdr, address) {
+  // Automated end-to-end tests only: compiled out of the real site (vite --mode test).
+  if (import.meta.env.MODE === "test" && window.__ssTestSigner) return window.__ssTestSigner(xdr, address);
   const net = await checkNetwork();
   if (!net.ok) throw new Error(net.message);
   try {

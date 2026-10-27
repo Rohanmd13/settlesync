@@ -32,6 +32,9 @@ export default function InvoiceSheet({ inv, status = "pending", stampKey, printa
           <strong>{formatAmount(inv.amount, inv.assetCode)}</strong>
         </div>
 
+        {inv.part && status !== "paid" && (
+          <p className="sheet__partnote">Part payments accepted{Number(inv.minPart) > 0 ? `, at least ${formatAmount(inv.minPart, inv.assetCode)} each` : ""}</p>
+        )}
         {inv.received > 0 && status !== "paid" && (
           <p className="sheet__partial">Received so far: {formatAmount(inv.received, inv.assetCode)}</p>
         )}

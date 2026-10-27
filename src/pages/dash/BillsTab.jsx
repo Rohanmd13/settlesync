@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "../../lib/app";
+import PayBox from "../../components/PayBox";
 import InvoiceSheet from "../../components/InvoiceSheet";
 import { QrImage, useCopy } from "../../components/bits";
 import { CopyIcon } from "../../components/Icons";
 import { statusOf, STATUS_LABEL, formatAmount, formatDate, remainingOf, relativeTime } from "../../lib/invoices";
 import { NETWORK, shortAddr } from "../../lib/stellar";
-import { payInvoice } from "../../lib/actions";
 
 export default function BillsTab({ bills, names, account, setNotice, onPaid }) {
   const { address } = useApp();
@@ -81,28 +81,17 @@ export default function BillsTab({ bills, names, account, setNotice, onPaid }) {
 
 function BillDetail({ bill, name, account, setNotice, onPaid }) {
   const { address } = useApp();
-  const [busy, setBusy] = useState(false);
   const [stampKey, setStampKey] = useState(null);
   const status = statusOf(bill);
   const remaining = remainingOf(bill);
-  const balance = account ? (bill.assetCode === "XLM" ? Number(account.xlm) : Number(account.usdc ?? 0)) : null;
-  const lacksTrust = bill.assetCode === "USDC" && account?.exists && !account.hasUsdcTrustline;
-  const tooLow = balance !== null && balance < Number(remaining);
 
   const sheet = { ...bill, fromName: name || "Requester", client: "You", description: "Payment request sent to your wallet", createdAt: bill.requestedAt };
 
-  const pay = async () => {
-    setBusy(true);
-    try {
-      await payInvoice({ payer: address, to: bill.to, amount: remaining, assetCode: bill.assetCode, invoiceId: bill.id });
-      setStampKey(Date.now());
-      setNotice({ kind: "success", text: `Paid ${formatAmount(remaining, bill.assetCode)} for ${bill.id}. ${name || "They"} will see it marked paid automatically.` });
-      onPaid();
-    } catch (e) {
-      setNotice({ kind: "error", text: e.message });
-    } finally {
-      setBusy(false);
-    }
+  const paid = ({ amount, paidWith }) => {
+    const full = (bill.received || 0) + amount + 1e-7 >= Number(bill.amount);
+    if (full) setStampKey(Date.now());
+    setNotice({ kind: "success", text: `Paid ${formatAmount(amount, bill.assetCode)}${paidWith ? ` (with ${paidWith})` : ""} for ${bill.id}. ${name || "They"} will see it on their invoice automatically.` });
+    onPaid();
   };
 
   return (
@@ -112,12 +101,9 @@ function BillDetail({ bill, name, account, setNotice, onPaid }) {
         <div className="card">
           <p className="card__title">Pay {name || shortAddr(bill.to)}</p>
           <p className="pay__amount">{formatAmount(remaining, bill.assetCode)}</p>
+          {bill.received > 0 && <p className="small">Already paid {formatAmount(bill.received, bill.assetCode)} of {formatAmount(bill.amount, bill.assetCode)}.</p>}
           <p className="small muted">From {shortAddr(bill.to)}{name ? "" : " (no name published)"}. Settles in about 5 seconds.</p>
-          {lacksTrust && <p className="alert alert--warn">Your wallet can't hold USDC yet. Use "Enable USDC" above, then add USDC to it.</p>}
-          {!lacksTrust && tooLow && <p className="alert alert--warn">Your balance ({formatAmount(balance, bill.assetCode)}) is lower than this bill.</p>}
-          <button className="btn btn--primary btn--wide btn--lg" onClick={pay} disabled={busy || lacksTrust || !account?.exists}>
-            {busy ? "Approve in your wallet…" : `Pay ${formatAmount(remaining, bill.assetCode)}`}
-          </button>
+          <PayBox inv={bill} remaining={remaining} payer={address} payerInfo={account} payeeName={name} blocked={!account?.exists} onPaid={paid} />
         </div>
       ) : (
         <div className="card">

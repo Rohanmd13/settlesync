@@ -12,6 +12,7 @@ import {
   formatAmount,
   formatDate,
   remainingOf,
+  localDay,
 } from "../../lib/invoices";
 import { NETWORK, shortAddr, isValidAddress, requestMemoFits } from "../../lib/stellar";
 import { sendPaymentRequest } from "../../lib/actions";
@@ -87,7 +88,7 @@ export default function InvoicesTab({ invoices, persist, rawInvoices, account, j
       ...rawInvoices.find((i) => i.id === inv.id),
       id: newInvoiceId(),
       createdAt: new Date().toISOString(),
-      dueDate: new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10),
+      dueDate: localDay(new Date(Date.now() + 14 * 864e5)),
       requestedTo: undefined,
       requestedAt: undefined,
       restored: undefined,
@@ -188,8 +189,9 @@ export default function InvoicesTab({ invoices, persist, rawInvoices, account, j
 }
 
 function InvoiceForm({ onCancel, onCreate, usdcReady }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const [f, setF] = useState({ client: "", clientAddress: "", description: "", amount: "", assetCode: "USDC", dueDate: today });
+  const today = localDay();
+  const [f, setF] = useState({ client: "", clientAddress: "", description: "", amount: "", assetCode: "USDC", dueDate: today, minPart: "" });
+  const [part, setPart] = useState(false);
   const [how, setHow] = useState("link");
   const [err, setErr] = useState("");
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -201,12 +203,17 @@ function InvoiceForm({ onCancel, onCreate, usdcReady }) {
     if (!f.client.trim()) return setErr("Add who you're billing.");
     if (!(Number(amount) > 0)) return setErr("Enter an amount greater than zero.");
     if (!/^\d+(\.\d{1,7})?$/.test(amount)) return setErr("Use digits only, with up to 7 decimal places.");
+    const minPart = part ? f.minPart.trim().replace(/,/g, "") : "";
+    if (minPart) {
+      if (!/^\d+(\.\d{1,7})?$/.test(minPart) || !(Number(minPart) > 0)) return setErr("The minimum per payment should be a number greater than zero, or left empty.");
+      if (Number(minPart) >= Number(amount)) return setErr("The minimum per payment should be less than the invoice amount.");
+    }
     if (how === "wallet") {
       if (!isValidAddress(f.clientAddress)) return setErr("Enter your client's Stellar address. It starts with G and is 56 characters.");
-      if (!requestMemoFits("SS-XXXXXX", amount, f.assetCode)) return setErr("This amount has too many digits for a wallet request. Use fewer decimals.");
+      if (!requestMemoFits("SS-XXXXXX", amount, f.assetCode, part, minPart)) return setErr("This amount (or minimum) has too many digits for a wallet request. Use fewer decimals.");
     }
     onCreate(
-      { client: f.client.trim(), description: f.description.trim(), amount, assetCode: f.assetCode, dueDate: f.dueDate },
+      { client: f.client.trim(), description: f.description.trim(), amount, assetCode: f.assetCode, dueDate: f.dueDate, ...(part ? { part: true, minPart } : {}) },
       how === "wallet" ? f.clientAddress.trim() : ""
     );
   };
@@ -234,6 +241,26 @@ function InvoiceForm({ onCancel, onCreate, usdcReady }) {
       <label className="field">Due date
         <input type="date" value={f.dueDate} min={today} onChange={set("dueDate")} />
       </label>
+
+      <div className={`part-toggle ${part ? "is-on" : ""}`}>
+        <label className="switch">
+          <input type="checkbox" role="switch" checked={part} onChange={(e) => setPart(e.target.checked)} />
+          <span className="switch__track" aria-hidden="true"><span className="switch__thumb" /></span>
+          <span className="switch__text">
+            <b>Allow part payments</b>
+            <small>Your client can pay in parts, like an advance now and the rest on delivery. Every part is matched to this invoice.</small>
+          </span>
+        </label>
+        {part && (
+          <label className="field part-toggle__min">Minimum per payment <span className="muted">(optional)</span>
+            <span className="paybox__amt">
+              <input value={f.minPart} onChange={set("minPart")} inputMode="decimal" placeholder="e.g. 5" />
+              <b>{f.assetCode}</b>
+            </span>
+            <small>The last payment can be smaller, so the invoice can always be finished.</small>
+          </label>
+        )}
+      </div>
 
       <fieldset className="how">
         <legend>How should your client get it?</legend>
@@ -339,7 +366,7 @@ function InvoiceDetail({ inv, stampKey, onDelete, onDuplicate, onRequestSent, se
             {inv.payments.map((p) => (
               <li key={p.id}>
                 <span className="receipts__amt">{formatAmount(p.amount, p.assetCode)}</span>
-                <span className="muted small">{formatDate(p.createdAt)} from {shortAddr(p.from)}</span>
+                <span className="muted small">{formatDate(p.createdAt)} from {shortAddr(p.from)}{p.paidWith ? ` · paid with ${formatAmount(p.paidWith.amount, p.paidWith.assetCode)}, converted on Stellar` : ""}</span>
                 <a className="small" href={NETWORK.explorerTx(p.hash)} target="_blank" rel="noreferrer">View transaction</a>
               </li>
             ))}

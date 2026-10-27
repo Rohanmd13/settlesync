@@ -102,19 +102,24 @@ export function shortAddr(a) {
 
 // ---------- request memos ----------
 // Format: R:<invoiceId>:<amount>:<U|X>   (must fit Stellar's 28-byte text memo)
-export function requestMemo(invoiceId, amount, assetCode) {
-  return `R:${invoiceId}:${amount}:${assetCode === "USDC" ? "U" : "X"}`;
+// Part payments allowed: the asset letter is lowercase, optionally followed by
+// the minimum per payment, e.g. R:SS-K7QM4X:30:x5
+export function requestMemo(invoiceId, amount, assetCode, part = false, minPart = "") {
+  const a = assetCode === "USDC" ? "U" : "X";
+  return `R:${invoiceId}:${amount}:${part ? a.toLowerCase() + (minPart || "") : a}`;
 }
 
 export function parseRequestMemo(memo) {
   if (!memo || !memo.startsWith("R:")) return null;
   const [, invoiceId, amount, a] = memo.split(":");
   if (!invoiceId || !amount || !a) return null;
-  return { invoiceId, amount, assetCode: a === "U" ? "USDC" : "XLM" };
+  const part = a[0] === "u" || a[0] === "x";
+  const minPart = part && Number(a.slice(1)) > 0 ? a.slice(1) : "";
+  return { invoiceId, amount, assetCode: a[0].toUpperCase() === "U" ? "USDC" : "XLM", part, minPart };
 }
 
-export function requestMemoFits(invoiceId, amount, assetCode) {
-  return new TextEncoder().encode(requestMemo(invoiceId, amount, assetCode)).length <= 28;
+export function requestMemoFits(invoiceId, amount, assetCode, part = false, minPart = "") {
+  return new TextEncoder().encode(requestMemo(invoiceId, amount, assetCode, part, minPart)).length <= 28;
 }
 
 // ---------- accounts ----------
@@ -123,9 +128,13 @@ export async function getAccountInfo(address) {
     const acc = await horizon.loadAccount(address);
     let xlm = "0";
     let usdc = null; // null = no trustline
+    const balances = [];
     for (const b of acc.balances) {
       if (b.asset_type === "native") xlm = b.balance;
       if (b.asset_code === "USDC" && b.asset_issuer === USDC_ISSUER) usdc = b.balance;
+      if (b.asset_type === "native" || b.asset_type === "credit_alphanum4" || b.asset_type === "credit_alphanum12") {
+        balances.push({ key: assetKey(b.asset_type === "native" ? null : b.asset_code, b.asset_issuer), code: b.asset_type === "native" ? "XLM" : b.asset_code, issuer: b.asset_issuer || null, amount: b.balance });
+      }
     }
     const nameB64 = acc.data_attr?.[PROFILE_DATA_KEY];
     return {
@@ -134,10 +143,11 @@ export async function getAccountInfo(address) {
       usdc,
       hasUsdcTrustline: usdc !== null,
       publicName: nameB64 ? decodeB64(nameB64) : null,
+      balances,
     };
   } catch (e) {
     if (e?.response?.status === 404) {
-      return { exists: false, xlm: "0", usdc: null, hasUsdcTrustline: false, publicName: null };
+      return { exists: false, xlm: "0", usdc: null, hasUsdcTrustline: false, publicName: null, balances: [] };
     }
     throw e;
   }
@@ -172,26 +182,71 @@ async function builder(from) {
 }
 
 // Client pays freelancer; the invoice ID rides in the memo for exact matching.
-export async function buildInvoicePayment({ from, to, amount, assetCode, invoiceId }) {
+// With `via`, the client pays in another asset they hold and Stellar converts it
+// inside the same payment (path payment, strict receive): the freelancer gets
+// exactly `amount` of the invoice asset, the client spends at most `via.sendMax`.
+export async function buildInvoicePayment({ from, to, amount, assetCode, invoiceId, via }) {
   const tb = await builder(from);
-  return tb
-    .addOperation(Operation.payment({ destination: to, asset: assetFor(assetCode), amount: String(amount) }))
-    .addMemo(Memo.text(invoiceId))
-    .setTimeout(180)
-    .build()
-    .toXDR();
+  const op = via
+    ? Operation.pathPaymentStrictReceive({
+        sendAsset: toAsset(via.code, via.issuer),
+        sendMax: via.sendMax,
+        destination: to,
+        destAsset: assetFor(assetCode),
+        destAmount: String(amount),
+        path: via.path || [],
+      })
+    : Operation.payment({ destination: to, asset: assetFor(assetCode), amount: String(amount) });
+  return tb.addOperation(op).addMemo(Memo.text(invoiceId)).setTimeout(180).build().toXDR();
+}
+
+export function assetKey(code, issuer) {
+  return !code || code === "XLM" ? "XLM" : `${code}:${issuer}`;
+}
+
+function toAsset(code, issuer) {
+  return !code || code === "XLM" ? Asset.native() : new Asset(code, issuer);
+}
+
+function fromHorizonAsset(a) {
+  return a.asset_type === "native" ? Asset.native() : new Asset(a.asset_code, a.asset_issuer);
+}
+
+// What it would cost the payer, in each other asset they hold, for the receiver
+// to get exactly `amount` of `assetCode`. Uses Stellar's built-in exchange.
+// Returns [{ key, code, issuer, sourceAmount, sendMax, path }], cheapest route per asset.
+export const CONVERSION_BUFFER = 0.01; // 1% for price moves between quote and payment
+export async function quoteConversions({ payer, assetCode, amount }) {
+  const res = await horizon.strictReceivePaths(payer, assetFor(assetCode), String(amount)).call();
+  const best = new Map();
+  for (const r of res.records) {
+    const code = r.source_asset_type === "native" ? "XLM" : r.source_asset_code;
+    if (code === assetCode && (code === "XLM" || r.source_asset_issuer === USDC_ISSUER)) continue;
+    const key = assetKey(code, r.source_asset_issuer);
+    const prev = best.get(key);
+    if (prev && Number(prev.sourceAmount) <= Number(r.source_amount)) continue;
+    best.set(key, {
+      key,
+      code,
+      issuer: r.source_asset_issuer || null,
+      sourceAmount: r.source_amount,
+      sendMax: (Number(r.source_amount) * (1 + CONVERSION_BUFFER)).toFixed(7),
+      path: r.path.map(fromHorizonAsset),
+    });
+  }
+  return [...best.values()];
 }
 
 // Freelancer sends a payment request straight to the client's wallet.
 // Optionally publishes the freelancer's display name on their own account
 // (manageData) so the client sees who is asking.
-export async function buildPaymentRequest({ from, to, invoiceId, amount, assetCode, publicName }) {
+export async function buildPaymentRequest({ from, to, invoiceId, amount, assetCode, publicName, part, minPart }) {
   const tb = await builder(from);
   tb.addOperation(Operation.payment({ destination: to, asset: Asset.native(), amount: REQUEST_NUDGE }));
   if (publicName) {
     tb.addOperation(Operation.manageData({ name: PROFILE_DATA_KEY, value: publicName.slice(0, 60) }));
   }
-  return tb.addMemo(Memo.text(requestMemo(invoiceId, amount, assetCode))).setTimeout(180).build().toXDR();
+  return tb.addMemo(Memo.text(requestMemo(invoiceId, amount, assetCode, part, minPart))).setTimeout(180).build().toXDR();
 }
 
 export async function buildUsdcTrustline(address) {
@@ -219,6 +274,9 @@ function explainResultCodes(codes) {
     op_no_destination: "That wallet isn't active on Stellar testnet yet. It needs a little XLM first.",
     op_line_full: "The receiving wallet can't accept this much USDC.",
     op_low_reserve: "Your wallet needs a bit more XLM to cover Stellar's minimum balance.",
+    op_over_source_max: "The exchange price moved while you were paying. Try again for a fresh price.",
+    op_too_few_offers: "Stellar's exchange can't convert that amount right now. Pay in the invoice's currency, or try a smaller amount.",
+    op_under_dest_min: "The exchange price moved while you were paying. Try again for a fresh price.",
   };
   if (op && map[op]) return map[op];
   if (codes.transaction === "tx_insufficient_balance") return "Not enough XLM to cover the network fee.";
@@ -237,9 +295,12 @@ export async function getAccountPayments(address, limit = 200) {
     .join("transactions")
     .call();
   return page.records
-    .filter((r) => r.type === "payment" || r.type === "create_account")
+    .filter((r) => r.type === "payment" || r.type === "create_account" || (r.type.startsWith("path_payment") && r.from !== r.to))
     .map((r) => {
       const isCreate = r.type === "create_account";
+      const isPath = r.type.startsWith("path_payment");
+      const srcCode = isPath ? (r.source_asset_type === "native" ? "XLM" : r.source_asset_code) : null;
+      const destCode = isCreate || r.asset_type === "native" ? "XLM" : r.asset_code;
       const to = isCreate ? r.account : r.to;
       const from = isCreate ? r.funder : r.from;
       return {
@@ -253,6 +314,8 @@ export async function getAccountPayments(address, limit = 200) {
         assetCode: isCreate || r.asset_type === "native" ? "XLM" : r.asset_code,
         memo: r.transaction_attr?.memo_type === "text" ? r.transaction_attr.memo : null,
         createdAt: r.created_at,
+        // Paid in another asset and converted on the way (path payment)
+        paidWith: isPath && srcCode !== destCode ? { amount: r.source_amount, assetCode: srcCode } : null,
       };
     });
 }
