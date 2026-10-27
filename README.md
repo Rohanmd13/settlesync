@@ -96,6 +96,17 @@ Non-custodial: funds move wallet to wallet; SettleSync never holds them or any k
 | Accountant export in local currency | One click | No | Statements only | Platform reports |
 | Who holds the money | You | You | Bank / PayPal | Platform |
 
+## Security
+
+- **Non-custodial:** every transaction is built in the browser and approved in the user's own wallet. SettleSync has no server, no keys and no database of funds.
+- **Untrusted input is validated:** pay links, on-chain request memos and backup files are checked field by field; anything malformed is rejected. All text is escaped (React, and the PDF builder), and was tested against HTML/script injection.
+- **No double payments:** what's left on an invoice is re-checked on Stellar right before paying, and just-sent payments update the page instantly, so an invoice can't be overpaid from a stale page.
+- **Converted payments are capped:** a client never spends more than 1% above the quoted price (`sendMax` on the path payment).
+- **Claim codes:** previews show what the code account really holds, never the amount written on it. Redeeming is signed by the code alone, so the redeemer's wallet signs nothing.
+- **Name check:** the pay page shows whether the name on a link matches the name the wallet published on Stellar, and warns if it doesn't.
+- **Headers:** the site can't be embedded in other sites (anti-clickjacking), plus `nosniff`, `no-referrer` and HSTS.
+- The owner page's passcode only hides a view of public, on-chain data; it can't move money.
+
 ## Run it locally
 
 ```bash

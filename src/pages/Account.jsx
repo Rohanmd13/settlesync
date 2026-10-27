@@ -5,6 +5,7 @@ import { downloadText } from "../lib/csv";
 import { FIATS } from "../lib/inr";
 import { NETWORK, getAccountInfo, getAccountPayments, proStatus } from "../lib/stellar";
 import { useCopy } from "../components/bits";
+import { publishName } from "../lib/actions";
 import { Avatar } from "../components/Header";
 import { WalletIcon } from "../components/Icons";
 
@@ -17,6 +18,8 @@ export default function Account() {
   const [account, setAccount] = useState(null);
   const [pro, setPro] = useState(null);
   const [copied, copy] = useCopy();
+  const [pubBusy, setPubBusy] = useState(false);
+  const [pubMsg, setPubMsg] = useState(null);
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -82,7 +85,7 @@ export default function Account() {
           <p className="card__title">Name for this wallet</p>
           <label className="field">{profile.role === "business" ? "Business name" : "Name"}
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ananya Rao" />
-            <small>Shown instead of the G… address everywhere in SettleSync, and on your invoices. When you send a wallet request, it's also saved on your Stellar account so the other person sees it.</small>
+            <small>Shown instead of the G… address everywhere in SettleSync, and on your invoices. Confirm it on Stellar (below) so clients can trust your pay links.</small>
           </label>
           {profile.role === "business" && (
             <label className="field">GSTIN or tax ID
@@ -90,6 +93,29 @@ export default function Account() {
             </label>
           )}
           <button className="btn btn--primary" type="submit">{saved ? "Saved" : "Save"}</button>
+          {account?.exists && profile.name && (
+            account.publicName === profile.name ? (
+              <p className="small pay__verified">{pubMsg?.kind === "success" ? "Done. " : ""}✓ Confirmed on Stellar. Clients paying your links see your name as verified.</p>
+            ) : (
+              <div className="name-pub">
+                <p className="small muted">{account.publicName ? `Your name on Stellar is still "${account.publicName}".` : "Your name isn't on Stellar yet."} Confirm it so clients paying your links see it's really you. One approval in your wallet; Stellar keeps a 0.5 XLM deposit on your account while it's there.</p>
+                <button type="button" className="btn btn--ghost btn--sm" disabled={pubBusy} onClick={async () => {
+                  setPubBusy(true);
+                  setPubMsg(null);
+                  try {
+                    await publishName({ from: address, name: profile.name });
+                    setAccount(await getAccountInfo(address));
+                    setPubMsg({ kind: "success", text: "Your name is now on Stellar." });
+                  } catch (err) {
+                    setPubMsg({ kind: "error", text: err.message });
+                  } finally {
+                    setPubBusy(false);
+                  }
+                }}>{pubBusy ? "Approve in your wallet…" : "Confirm my name on Stellar"}</button>
+                {pubMsg && <p className={`alert alert--${pubMsg.kind}`}>{pubMsg.text}</p>}
+              </div>
+            )
+          )}
         </form>
 
         <section className="card">

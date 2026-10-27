@@ -15,8 +15,15 @@ import {
   buildTestUsdcSwap,
   NETWORK,
   rememberPending,
+  buildPublishName,
 } from "./stellar";
 import { signWithWallet } from "./wallet";
+
+export async function publishName({ from, name }) {
+  if (!name || !name.trim()) throw new Error("Add a name first.");
+  const xdr = await buildPublishName({ from, name });
+  return submitSigned(await signWithWallet(xdr, from));
+}
 
 export async function payInvoice({ payer, to, amount, assetCode, invoiceId, via }) {
   const xdr = await buildInvoicePayment({ from: payer, to, amount, assetCode, invoiceId, via });

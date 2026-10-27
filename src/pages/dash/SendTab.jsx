@@ -172,9 +172,13 @@ function DirectForm({ account, setNotice, onSent }) {
         </label>
       </div>
       <p className="send__have small">
-        You have <b>{formatAmount(account?.usdc || 0, "USDC")}</b> and <b>{formatAmount(account?.xlm || 0, "XLM")}</b>.
-        {f.assetCode === "USDC" && estimate ? <> Your spare XLM could become about <b>{formatAmount(estimate.toFixed(2), "USDC")}</b> if you pay with XLM.</> : null}
-        {amount && own < Number(amount) ? <> Not enough {f.assetCode}? Pick another currency under <b>Pay with</b> and Stellar converts it as you pay.</> : null}
+        In your wallet: <b>{formatAmount(account?.usdc || 0, "USDC")}</b> · <b>{formatAmount(Number(account?.xlm || 0).toFixed(2), "XLM")}</b>
+        {amount && own < Number(amount) ? (
+          <span className="send__tip">
+            You don't have enough {f.assetCode}, but that's fine: pay with {f.assetCode === "USDC" ? "XLM" : "another currency"} below and Stellar converts it, so they still get exactly {formatAmount(amount, f.assetCode)}.
+            {f.assetCode === "USDC" && estimate ? ` Your XLM is worth about ${formatAmount(estimate.toFixed(2), "USDC")}.` : ""}
+          </span>
+        ) : null}
       </p>
       <label className="field">What it's for <span className="muted">(optional, up to 28 characters)</span>
         <input value={f.note} onChange={set("note")} maxLength={28} placeholder="Logo, October" />

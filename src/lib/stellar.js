@@ -113,6 +113,9 @@ export function parseRequestMemo(memo) {
   if (!memo || !memo.startsWith("R:")) return null;
   const [, invoiceId, amount, a] = memo.split(":");
   if (!invoiceId || !amount || !a) return null;
+  // Requests can be sent by anyone: accept only well-formed ones.
+  if (!/^[A-Za-z0-9-]{1,20}$/.test(invoiceId) || !/^\d{1,12}(\.\d{1,7})?$/.test(amount) || !(Number(amount) > 0)) return null;
+  if (!/^[UXux](\d{1,12}(\.\d{1,7})?)?$/.test(a)) return null;
   const part = a[0] === "u" || a[0] === "x";
   const minPart = part && Number(a.slice(1)) > 0 ? a.slice(1) : "";
   return { invoiceId, amount, assetCode: a[0].toUpperCase() === "U" ? "USDC" : "XLM", part, minPart };
@@ -280,6 +283,13 @@ export async function buildPaymentRequest({ from, to, invoiceId, amount, assetCo
     tb.addOperation(Operation.manageData({ name: PROFILE_DATA_KEY, value: publicName.slice(0, 60) }));
   }
   return tb.addMemo(Memo.text(requestMemo(invoiceId, amount, assetCode, part, minPart))).setTimeout(180).build().toXDR();
+}
+
+// Publish (or update) the display name on the user's own Stellar account.
+export async function buildPublishName({ from, name }) {
+  const tb = await builder(from);
+  tb.addOperation(Operation.manageData({ name: PROFILE_DATA_KEY, value: clipBytes(name.trim(), 60) }));
+  return tb.setTimeout(180).build().toXDR();
 }
 
 export async function buildUsdcTrustline(address) {
@@ -462,15 +472,29 @@ export async function readClaimCode(secret) {
     throw e;
   }
   const d = (k) => (acc.data_attr?.[k] ? decodeB64(acc.data_attr[k]) : null);
-  const [amount, assetCode] = (d(CODE_KEYS.amt) || "").split(" ");
+  const [stated, code] = (d(CODE_KEYS.amt) || "").split(" ");
+  // Never trust the amount written on the code: show only what the account really holds.
+  const assetCode = code === "USDC" ? "USDC" : code === "XLM" ? "XLM" : null;
+  if (!assetCode || !(Number(stated) > 0)) return null;
+  let held = 0;
+  for (const b of acc.balances) {
+    if (assetCode === "XLM" && b.asset_type === "native") {
+      const reserve = 0.5 * (2 + (acc.subentry_count || 0)) + 0.01; // minimum balance + fee room
+      held = Math.max(0, Number(b.balance) - reserve);
+    }
+    if (assetCode === "USDC" && b.asset_code === "USDC" && b.asset_issuer === USDC_ISSUER) held = Number(b.balance);
+  }
+  const amount = Math.min(Number(stated), held);
+  if (!(amount > 0)) return null;
+  const from = d(CODE_KEYS.from);
   return {
     publicKey: pub,
     id: codeId(pub),
-    from: d(CODE_KEYS.from),
+    amount: amount.toFixed(7).replace(/\.?0+$/, ""),
+    assetCode,
+    from: from && isValidAddress(from) ? from : null,
     fromName: d(CODE_KEYS.name),
     note: d(CODE_KEYS.note),
-    amount,
-    assetCode,
   };
 }
 

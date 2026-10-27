@@ -20,6 +20,7 @@ export default function PayPage({ token }) {
   const [state, setState] = useState(null);
   const [payerInfo, setPayerInfo] = useState(null);
   const [receiverOk, setReceiverOk] = useState(null);
+  const [chainName, setChainName] = useState(undefined); // name the receiving wallet published on Stellar
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const [stampKey, setStampKey] = useState(null);
@@ -31,7 +32,11 @@ export default function PayPage({ token }) {
       .then((pays) => alive && setState(matchPayments([invoice], pays)[0]))
       .catch(() => alive && setState({ ...invoice, received: 0, payments: [] }));
     getAccountInfo(invoice.to)
-      .then((i) => alive && setReceiverOk(invoice.assetCode === "XLM" ? i.exists : i.hasUsdcTrustline))
+      .then((i) => {
+        if (!alive) return;
+        setReceiverOk(invoice.assetCode === "XLM" ? i.exists : i.hasUsdcTrustline);
+        setChainName(i.publicName || null);
+      })
       .catch(() => alive && setReceiverOk(null));
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -115,6 +120,15 @@ export default function PayPage({ token }) {
               <p className="pay__eyebrow">{view.received > 0 ? "Left to pay" : `Pay ${invoice.fromName || "this invoice"}`}</p>
               <p className="pay__amount">{formatAmount(remaining, invoice.assetCode)}</p>
               {view.received > 0 && <p className="small">Already received {formatAmount(view.received, invoice.assetCode)} of {formatAmount(invoice.amount, invoice.assetCode)}.</p>}
+              {chainName !== undefined && invoice.fromName && (
+                chainName && chainName.trim().toLowerCase() === invoice.fromName.trim().toLowerCase() ? (
+                  <p className="small pay__verified">✓ "{chainName}" is the name this wallet published on Stellar.</p>
+                ) : (
+                  <p className="small pay__unverified">
+                    The name "{invoice.fromName}" comes from this link{chainName ? `, but the wallet's name on Stellar is "${chainName}"` : " and isn't confirmed on Stellar"}. Before paying, check with the sender that their wallet is <b title={invoice.to}>{shortAddr(invoice.to)}</b>.
+                  </p>
+                )
+              )}
               <p className="small muted">Sent straight to {shortAddr(invoice.to)} on Stellar. Settles in about 5 seconds; the fee is a fraction of a rupee.</p>
               <a className="sep7-link" href={sep7PayUri({ to: invoice.to, amount: remaining, assetCode: invoice.assetCode, memo: invoice.id, msg: `Invoice ${invoice.id}${invoice.fromName ? ` from ${invoice.fromName}` : ""}` })}>
                 Paying from a phone? Open in your wallet app

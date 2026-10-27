@@ -1,6 +1,6 @@
 // Invoices live in this browser (localStorage), keyed by the wallet that issues them.
 // Invoices sent as on-chain payment requests can also be restored from Stellar itself.
-import { parseRequestMemo, shortAddr, NETWORK } from "./stellar";
+import { parseRequestMemo, shortAddr, NETWORK, isValidAddress } from "./stellar";
 
 // Testnet keeps the original key so existing pilot data stays; Main Net is separate.
 const KEY = (addr) => (NETWORK.id === "mainnet" ? `settlesync:invoices:mainnet:${addr}` : `settlesync:invoices:${addr}`);
@@ -94,11 +94,35 @@ export function payLinkFor(inv) {
   return `${base}#/pay/${toBase64Url(JSON.stringify(data))}`;
 }
 
+// Pay links can be written by anyone, so every field is checked and anything
+// unexpected is dropped before the page uses it.
+const AMOUNT_RE = /^\d{1,12}(\.\d{1,7})?$/;
+const clean = (v, max) => (typeof v === "string" ? v.slice(0, max) : "");
 export function decodePayLink(token) {
   try {
     const d = JSON.parse(fromBase64Url(token));
-    if (!d.id || !d.to || !d.amount || !d.assetCode) return null;
-    return d;
+    if (!d || typeof d !== "object") return null;
+    if (typeof d.id !== "string" || !/^[A-Za-z0-9-]{1,28}$/.test(d.id)) return null;
+    if (!isValidAddress(d.to)) return null;
+    if (!AMOUNT_RE.test(String(d.amount)) || !(Number(d.amount) > 0)) return null;
+    if (d.assetCode !== "USDC" && d.assetCode !== "XLM") return null;
+    const minPart = d.part && AMOUNT_RE.test(String(d.minPart || "")) && Number(d.minPart) > 0 && Number(d.minPart) < Number(d.amount) ? String(d.minPart) : "";
+    const day = (v) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 24) : "");
+    return {
+      id: d.id,
+      to: d.to,
+      amount: String(d.amount),
+      assetCode: d.assetCode,
+      fromName: clean(d.fromName, 60),
+      gstin: clean(d.gstin, 20),
+      client: clean(d.client, 80),
+      description: clean(d.description, 140),
+      dueDate: day(d.dueDate),
+      createdAt: day(d.createdAt),
+      net: d.net === "mainnet" ? "mainnet" : "testnet",
+      part: d.part === true,
+      minPart,
+    };
   } catch {
     return null;
   }
@@ -277,5 +301,7 @@ export function backupJson(addr, list) {
 export function parseBackup(text) {
   const data = JSON.parse(text);
   if (data?.app !== "settlesync" || !Array.isArray(data.invoices)) throw new Error("This isn't a SettleSync backup file.");
-  return data;
+  // Keep only well-formed invoices, so a damaged or edited file can't break the dashboard.
+  const ok = (i) => i && typeof i.id === "string" && /^[A-Za-z0-9-]{1,28}$/.test(i.id) && /^\d{1,12}(\.\d{1,7})?$/.test(String(i.amount)) && (i.assetCode === "USDC" || i.assetCode === "XLM") && typeof i.to === "string";
+  return { ...data, invoices: data.invoices.filter(ok) };
 }
